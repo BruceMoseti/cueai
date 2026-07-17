@@ -1,0 +1,10 @@
+{
+  "torch_mae_m": 0.007152832578867674,
+  "physics_only_mae_m": 0.006510819774121046,
+  "improvement_pct": -9.86070613255915,
+  "epochs": 12,
+  "n_samples": 600,
+  "history_last": 2.6276023224151383e-05,
+  "onnx": "models/cuenet.onnx",
+  "checkpoint": "models/cuenet.pt"
+}

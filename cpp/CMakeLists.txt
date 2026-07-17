@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(cueai_cpp LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+add_executable(cueai_demo src/demo.cpp)
+target_include_directories(cueai_demo PRIVATE include)

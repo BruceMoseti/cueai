@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cueai"
+version = "0.1.0"
+description = "Physics-informed AI billiards simulation platform"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "scipy>=1.11",
+  "scikit-learn>=1.4",
+  "torch>=2.1",
+  "onnx>=1.15",
+  "onnxruntime>=1.16",
+  "opencv-python-headless>=4.8",
+  "PyQt6>=6.6",
+  "fastapi>=0.109",
+  "uvicorn[standard]>=0.27",
+  "pydantic>=2.5",
+  "httpx>=0.26",
+  "matplotlib>=3.8",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+cueai-ui = "cueai.ui.app:main"
+cueai-train = "cueai.ml.train:main"
+cueai-api = "cueai.api.main:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

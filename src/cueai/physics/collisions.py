@@ -1,0 +1,216 @@
+"""Ball-ball and ball-cushion collisions with friction, throw, and multi-hit."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from cueai.physics.ball import Ball
+from cueai.physics.constants import TableParams
+
+
+def ball_ball_friction(v_rel: float, table: TableParams) -> float:
+    """
+    Velocity-dependent ball-ball friction (Alciatore TP A-14 style).
+    μ_b ≈ a + b exp(-c |v_rel|)
+    """
+    a, b, c = 0.02, 0.08, 0.85
+    base = a + b * np.exp(-c * abs(v_rel))
+    # Scale toward configured table.mu_ball
+    return float(np.clip(0.5 * (base + table.mu_ball), 0.01, 0.25))
+
+
+def resolve_ball_ball(a: Ball, b: Ball, table: TableParams) -> tuple[Ball, Ball]:
+    """
+    Equal-mass frictional inelastic collision with spin transfer / throw.
+
+    Includes relative-velocity-dependent friction and contact-point ω coupling.
+    """
+    a, b = a.copy(), b.copy()
+    if a.pocketed or b.pocketed:
+        return a, b
+
+    delta = b.pos - a.pos
+    dist = float(np.linalg.norm(delta))
+    min_dist = a.R + b.R
+    if dist < 1e-12:
+        return a, b
+    if dist > min_dist + 2e-4:
+        return a, b
+
+    n = delta / dist
+    overlap = min_dist - dist
+    if overlap > 0:
+        # Mass-proportional separation (equal mass → half/half)
+        a.pos = a.pos - 0.5 * overlap * n
+        b.pos = b.pos + 0.5 * overlap * n
+
+    ra = a.R * np.array([n[0], n[1], 0.0])
+    rb = -b.R * np.array([n[0], n[1], 0.0])
+    wa = np.array([a.omega[0], a.omega[1], a.omega[2]])
+    wb = np.array([b.omega[0], b.omega[1], b.omega[2]])
+    va3 = np.array([a.vel[0], a.vel[1], 0.0])
+    vb3 = np.array([b.vel[0], b.vel[1], 0.0])
+    v_rel = (va3 - vb3) + np.cross(wa, ra) - np.cross(wb, rb)
+
+    v_n = float(np.dot(v_rel[:2], n))
+    # n points a→b; approaching when (va−vb)·n > 0
+    if v_n <= 1e-6:
+        return a, b  # separating or resting
+
+    e = table.e_ball
+    # Slightly softer at high speed (energy loss grows)
+    speed_n = abs(v_n)
+    e_eff = float(np.clip(e - 0.02 * max(0.0, speed_n - 2.0), 0.75, 0.98))
+    m = a.m
+    # J < 0 pushes a opposite n and b along n
+    j_n = -(1 + e_eff) * v_n * (m / 2.0)
+
+    v_t_vec = v_rel[:2] - v_n * n
+    # Include out-of-plane spin contribution projected onto tangent
+    v_t = float(np.linalg.norm(v_t_vec))
+    if v_t > 1e-9:
+        t_hat = v_t_vec / v_t
+    else:
+        t_hat = np.array([-n[1], n[0]])
+
+    mu_b = ball_ball_friction(v_t + speed_n, table)
+    j_t_max = mu_b * abs(j_n)
+    I = a.I
+    R = a.R
+    inv_m_t = 2.0 / m + 2.0 * (R**2) / I
+    j_t = -v_t / inv_m_t
+    j_t = float(np.clip(j_t, -j_t_max, j_t_max))
+
+    J = j_n * n + j_t * t_hat
+    a.vel = a.vel + J / m
+    b.vel = b.vel - J / m
+
+    J3 = np.array([J[0], J[1], 0.0])
+    a.omega = a.omega + np.cross(ra, J3) / I
+    b.omega = b.omega + np.cross(rb, -J3) / I
+
+    # Vertical-axis spin coupling (throw / cling residual)
+    a.omega[2] += 0.15 * j_t / (I / R)
+    b.omega[2] -= 0.15 * j_t / (I / R)
+    return a, b
+
+
+def resolve_cushion(ball: Ball, table: TableParams) -> Ball:
+    """
+    Cushion bounce with friction, spin transfer, and corner dual-rail hits.
+    """
+    b = ball.copy()
+    if b.pocketed:
+        return b
+
+    R = b.R
+    L, W = table.length, table.width
+    e = table.e_cushion
+    mu = table.mu_cushion
+
+    # Detect which rails are penetrated (corners → both)
+    normals: list[np.ndarray] = []
+    if b.pos[0] - R < 0:
+        b.pos[0] = R
+        normals.append(np.array([1.0, 0.0]))
+    elif b.pos[0] + R > L:
+        b.pos[0] = L - R
+        normals.append(np.array([-1.0, 0.0]))
+    if b.pos[1] - R < 0:
+        b.pos[1] = R
+        normals.append(np.array([0.0, 1.0]))
+    elif b.pos[1] + R > W:
+        b.pos[1] = W - R
+        normals.append(np.array([0.0, -1.0]))
+
+    if not normals:
+        return b
+
+    for n in normals:
+        # Skip if near a pocket mouth (ball should fall, not bounce hard)
+        near_pocket = False
+        for px, py in table.pockets:
+            if float(np.hypot(b.pos[0] - px, b.pos[1] - py)) < table.pocket_radius * 1.15:
+                near_pocket = True
+                break
+        if near_pocket:
+            continue
+
+        v_n = float(np.dot(b.vel, n))
+        if v_n >= 0:
+            continue
+
+        t = np.array([-n[1], n[0]])
+        # Contact velocity includes topspin/backspin into rail and sidespin along rail
+        # ω × r_contact with r ≈ -R n (contact toward cushion)
+        r_c = -R * np.array([n[0], n[1], 0.0])
+        w3 = np.array([b.omega[0], b.omega[1], b.omega[2]])
+        v_contact = np.array([b.vel[0], b.vel[1], 0.0]) + np.cross(w3, r_c)
+        v_t_contact = float(np.dot(v_contact[:2], t))
+
+        # Speed-dependent restitution (softer at high speed)
+        e_eff = float(np.clip(e - 0.03 * max(0.0, abs(v_n) - 1.5), 0.55, 0.92))
+        j_n = -(1 + e_eff) * v_n * b.m
+
+        # Tangential friction + compliance-ish (partial stick)
+        inv_m_t = 1.0 / b.m + (R**2) / b.I
+        j_t = -v_t_contact / inv_m_t
+        j_t = float(np.clip(j_t, -mu * abs(j_n), mu * abs(j_n)))
+
+        b.vel = b.vel + (j_n * n + j_t * t) / b.m
+        # Torques from rail impulse
+        J3 = np.array([j_n * n[0] + j_t * t[0], j_n * n[1] + j_t * t[1], 0.0])
+        b.omega = b.omega + np.cross(r_c, J3) / b.I
+        # Rail compresses english somewhat
+        b.omega[2] *= 0.85
+
+    return b
+
+
+def check_pocket(ball: Ball, table: TableParams) -> Ball:
+    b = ball.copy()
+    for px, py in table.pockets:
+        # Slightly larger capture when moving toward pocket
+        capture = table.pocket_radius
+        if float(np.hypot(b.pos[0] - px, b.pos[1] - py)) < capture:
+            b.pocketed = True
+            b.vel[:] = 0
+            b.omega[:] = 0
+            # Park off-table visually
+            b.pos = np.array([-1.0, -1.0], dtype=np.float64)
+            break
+    return b
+
+
+def resolve_all_ball_collisions(
+    balls: list[Ball], table: TableParams, passes: int = 8
+) -> list[Ball]:
+    """
+    Multi-pass pairwise resolution so cluster breaks / simultaneous contacts
+    propagate (critical for a packed rack).
+    """
+    balls = [b.copy() for b in balls]
+    n = len(balls)
+    for _ in range(passes):
+        any_hit = False
+        # Process deepest overlaps first for stability
+        pairs: list[tuple[float, int, int]] = []
+        for i in range(n):
+            if balls[i].pocketed:
+                continue
+            for j in range(i + 1, n):
+                if balls[j].pocketed:
+                    continue
+                d = float(np.linalg.norm(balls[i].pos - balls[j].pos))
+                min_d = balls[i].R + balls[j].R
+                if d <= min_d + 1e-4:
+                    pairs.append((d - min_d, i, j))
+        pairs.sort()  # most overlapped first
+        for _, i, j in pairs:
+            bi, bj = resolve_ball_ball(balls[i], balls[j], table)
+            if not np.allclose(bi.vel, balls[i].vel) or not np.allclose(bj.vel, balls[j].vel):
+                any_hit = True
+            balls[i], balls[j] = bi, bj
+        if not any_hit and not pairs:
+            break
+    return balls

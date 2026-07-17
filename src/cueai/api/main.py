@@ -1,0 +1,126 @@
+"""FastAPI backend for CueAI full-rack simulation + prediction."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from cueai.ml.infer import TrajectoryPredictor
+from cueai.physics.constants import ShotParams, TableParams
+from cueai.physics.rack import make_full_rack
+
+app = FastAPI(
+    title="CueAI API",
+    description="Physics-informed full-rack billiards simulation",
+    version="0.2.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_MODEL_DIR = Path(__file__).resolve().parents[3] / "models"
+_predictor = TrajectoryPredictor(model_dir=_MODEL_DIR)
+
+
+class ShotRequest(BaseModel):
+    speed: float = Field(4.5, ge=0.1, le=12)
+    angle_deg: float = Field(0.0, description="Launch angle in degrees")
+    english_x: float = Field(0.0, ge=-1, le=1)
+    english_y: float = Field(0.0, ge=-1, le=1)
+    cue_elevation_deg: float = 0.0
+    cue_x: float = 0.635
+    cue_y: float = 0.635
+    obj_x: float | None = None
+    obj_y: float | None = None
+    mu_slide: float = 0.2
+    friction_noise_amp: float = 0.025
+    use_ml: bool = True
+    full_rack: bool = True
+    rack_seed: int = 7
+
+
+class HealthResponse(BaseModel):
+    status: str
+    ml_loaded: bool
+    version: str
+
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        ml_loaded=_predictor.net is not None or _predictor.ort_session is not None,
+        version="0.2.0",
+    )
+
+
+@app.post("/predict")
+def predict(req: ShotRequest) -> dict:
+    import numpy as np
+
+    shot = ShotParams(
+        speed=req.speed,
+        angle=float(np.deg2rad(req.angle_deg)),
+        english_x=req.english_x,
+        english_y=req.english_y,
+        cue_elevation=float(np.deg2rad(req.cue_elevation_deg)),
+    )
+    table = TableParams(
+        mu_slide=req.mu_slide,
+        friction_noise_amp=req.friction_noise_amp,
+    )
+    obj = (req.obj_x, req.obj_y) if req.obj_x is not None and req.obj_y is not None else None
+    return _predictor.predict(
+        shot,
+        cue_pos=(req.cue_x, req.cue_y),
+        obj_pos=obj,
+        table=table,
+        use_ml=req.use_ml,
+        full_rack=req.full_rack,
+        seed=req.rack_seed,
+    )
+
+
+@app.get("/rack")
+def rack(seed: int = 7) -> dict:
+    balls = make_full_rack(seed=seed)
+    return {
+        "balls": [
+            {
+                "id": b.id,
+                "number": b.number,
+                "suit": b.identity.suit if b.identity else None,
+                "color": list(b.identity.color) if b.identity else None,
+                "stripe": bool(b.identity and b.identity.is_stripe),
+                "pos": b.pos.tolist(),
+            }
+            for b in balls
+        ]
+    }
+
+
+@app.get("/table")
+def table_info() -> dict:
+    t = TableParams()
+    return {
+        "length": t.length,
+        "width": t.width,
+        "pockets": t.pockets,
+        "pocket_radius": t.pocket_radius,
+    }
+
+
+def run() -> None:
+    import uvicorn
+
+    uvicorn.run("cueai.api.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+if __name__ == "__main__":
+    run()
