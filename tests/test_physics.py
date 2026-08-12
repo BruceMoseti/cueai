@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cueai.physics.ball import Ball, integrate_ball, MotionState
+from cueai.physics.ball import Ball, MotionState, integrate_ball
 from cueai.physics.constants import BallParams, ShotParams, TableParams
 from cueai.physics.rack import make_full_rack
 from cueai.physics.simulator import Simulator, shot_feature_vector

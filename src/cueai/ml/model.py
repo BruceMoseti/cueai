@@ -16,6 +16,11 @@ class CueNet(nn.Module):
 
     def __init__(self, in_dim: int = 18, hidden: int = 128, out_dim: int = 4):
         super().__init__()
+        # Zero-initialised head: training starts from "trust the physics exactly"
+        # and only moves away where the data says the physics is incomplete.
+        head = nn.Linear(hidden // 2, out_dim)
+        nn.init.zeros_(head.weight)
+        nn.init.zeros_(head.bias)
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden),
             nn.SiLU(),
@@ -25,11 +30,8 @@ class CueNet(nn.Module):
             nn.Dropout(0.1),
             nn.Linear(hidden, hidden // 2),
             nn.SiLU(),
-            nn.Linear(hidden // 2, out_dim),
+            head,
         )
-        # Start near identity residual (physics-only)
-        nn.init.zeros_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)

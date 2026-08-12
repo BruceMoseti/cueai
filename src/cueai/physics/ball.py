@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cueai.physics.constants import G, BallParams, TableParams
+from cueai.physics.constants import BallParams, G, TableParams
 
 if TYPE_CHECKING:
     from cueai.physics.rack import BallIdentity
@@ -31,9 +31,9 @@ class Ball:
     params: BallParams = field(default_factory=BallParams)
     pocketed: bool = False
     number: int = 0
-    identity: Optional["BallIdentity"] = None
+    identity: BallIdentity | None = None
 
-    def copy(self) -> "Ball":
+    def copy(self) -> Ball:
         return Ball(
             id=self.id,
             pos=self.pos.copy(),

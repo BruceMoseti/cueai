@@ -84,7 +84,10 @@ def simulate_sample(index: int, seed: int = 42) -> dict[str, float]:
         [rng.uniform(radius * 3, length * 0.4), rng.uniform(radius * 3, width - radius * 3)]
     )
     obj_pos = np.array(
-        [rng.uniform(length * 0.45, length - radius * 3), rng.uniform(radius * 3, width - radius * 3)]
+        [
+            rng.uniform(length * 0.45, length - radius * 3),
+            rng.uniform(radius * 3, width - radius * 3),
+        ]
     )
     if np.linalg.norm(cue_pos - obj_pos) < 4 * radius:
         obj_pos[0] = min(length - 3 * radius, cue_pos[0] + 0.35)
@@ -121,7 +124,7 @@ def simulate_sample(index: int, seed: int = 42) -> dict[str, float]:
     ]
 
     row = {name: float(value) for name, value in zip(FEATURE_NAMES, features)}
-    row.update({name: value for name, value in zip(TARGET_NAMES, targets)})
+    row.update(dict(zip(TARGET_NAMES, targets)))
 
     # Closed-form baseline: analytic stopping point for the cue ball, and the
     # object ball left where it started, since the analytic model has no notion
@@ -147,7 +150,7 @@ def generate_dataset(
     """Simulate ``n_samples`` random shots, in parallel by default."""
     jobs = jobs or min(os.cpu_count() or 1, 16)
     indices = range(n_samples)
-    progress = dict(total=n_samples, desc="Simulating shots", unit="shot")
+    progress = {"total": n_samples, "desc": "Simulating shots", "unit": "shot"}
 
     if jobs <= 1:
         rows = [simulate_sample(i, seed) for i in tqdm(indices, **progress)]

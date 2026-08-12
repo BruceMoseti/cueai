@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-
 G = 9.81  # m/s^2
 
 

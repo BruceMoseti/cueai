@@ -15,11 +15,11 @@ import pytest
 from cueai.physics import analytic
 from cueai.physics.ball import Ball, MotionState, integrate_ball
 from cueai.physics.collisions import resolve_ball_ball, resolve_cushion
-from cueai.physics.constants import G, BallParams, ShotParams, TableParams
+from cueai.physics.constants import BallParams, G, ShotParams, TableParams
 from cueai.physics.simulator import Simulator
 
 DT = 1e-4
-SMOOTH_CLOTH = dict(friction_noise_amp=0.0)
+SMOOTH_CLOTH = {"friction_noise_amp": 0.0}
 
 
 def _launch(v0: float, english_y: float = 0.0, english_x: float = 0.0) -> Ball:

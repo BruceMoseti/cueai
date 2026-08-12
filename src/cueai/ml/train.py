@@ -180,7 +180,7 @@ def _export_onnx(net: CueNet, in_dim: int, path: Path) -> bool:
     try:
         torch.onnx.export(
             net.cpu(),
-            torch.randn(1, in_dim, dtype=torch.float32),
+            (torch.randn(1, in_dim, dtype=torch.float32),),
             str(path),
             input_names=["features"],
             output_names=["residual"],
@@ -189,7 +189,7 @@ def _export_onnx(net: CueNet, in_dim: int, path: Path) -> bool:
             dynamo=False,
         )
         return True
-    except Exception as exc:  # noqa: BLE001 - export is optional, keep training green
+    except Exception as exc:
         print(f"ONNX export skipped: {exc}")
         return False
 
@@ -241,8 +241,8 @@ def main(argv: list[str] | None = None) -> dict:
 
     predictions = {"analytic": base_test, "gbm": gbm_pred, "cuenet": cuenet_pred}
     metrics = {
-        "n_samples": int(len(df)),
-        "n_test": int(len(y_test)),
+        "n_samples": len(df),
+        "n_test": len(y_test),
         "epochs": args.epochs,
         "final_train_loss": history[-1] if history else None,
         "models": {"analytic": analytic, "gbm": gbm, "cuenet": cuenet},

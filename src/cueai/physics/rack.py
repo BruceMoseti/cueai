@@ -142,7 +142,7 @@ def make_full_rack(
     )
     balls.append(cue)
 
-    for idx, (num, pos) in enumerate(zip(numbers, spots)):
+    for num, pos in zip(numbers, spots):
         balls.append(
             Ball(
                 id=num,  # use ball number as id for clarity

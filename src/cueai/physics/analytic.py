@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cueai.physics.constants import G, BallParams, ShotParams, TableParams
+from cueai.physics.constants import BallParams, G, ShotParams, TableParams
 
 # Slip decays 3.5x faster than the centre of mass because the friction torque
 # also spins the ball up: 1 + mR²/I = 1 + 5/2.
@@ -101,7 +101,12 @@ class FreeBallOutcome:
 
 
 def _slide_rail_time(
-    pos: np.ndarray, vel: np.ndarray, accel: np.ndarray, lo: np.ndarray, hi: np.ndarray, t_end: float
+    pos: np.ndarray,
+    vel: np.ndarray,
+    accel: np.ndarray,
+    lo: np.ndarray,
+    hi: np.ndarray,
+    t_end: float,
 ) -> tuple[float, int]:
     """
     First cushion crossing during a parabolic sliding segment.

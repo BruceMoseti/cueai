@@ -7,20 +7,20 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PyQt6.QtCore import QPointF, Qt, QTimer, QRectF
-from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
-    QCheckBox,
+    QSlider,
     QVBoxLayout,
     QWidget,
-    QSlider,
 )
 
 from cueai.ml.infer import TrajectoryPredictor
@@ -408,9 +408,7 @@ class MainWindow(QMainWindow):
             mu_slide=self.mu.value(),
             friction_noise_amp=self.noise.value(),
         )
-        # Continue from current table state (multi-shot play)
-        live = [b.copy() for b in self.canvas.balls if not b.pocketed or b.number == 0]
-        # keep pocketed markers
+        # Continue from the current table state, pocketed markers included
         all_balls = [b.copy() for b in self.canvas.balls]
         result = self.predictor.predict(
             shot,
