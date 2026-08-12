@@ -47,6 +47,12 @@ Node and compares where each ball stopped.
 Continuous integration runs that check on every push and refuses to deploy the
 page if the two drift apart.
 
+Twenty headless bot-against-bot games walk every branch of the rules, and check
+on each of the roughly eight hundred thousand physics steps they take that no
+two balls are ever sharing space and nothing is ever inside a cushion. The worst
+overlap seen is 0.5 mm on a 57 mm ball — a fifth of a screen pixel — which is
+the difference between "the solver converges" and "it looks like it does".
+
 **The opponent is a search, and that is the argument.**
 
 <img alt="The bot reporting what its search cost" src="docs/assets/web_bot.png" width="360" align="right" />

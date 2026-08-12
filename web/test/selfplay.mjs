@@ -18,6 +18,12 @@ import { mulberry32 } from "../js/rack.js";
 
 const GAME_DT = 0.001;
 const MAX_SHOTS = 250;
+// Balls are separated by projection rather than by solving for the exact
+// contact time, so some overlap is inherent and the useful question is whether
+// it is visible. On a 2.54 m table drawn a thousand pixels wide a pixel is
+// 2.5 mm, so this is the threshold at which two balls would start to look like
+// they were sharing space. Twenty games measure a worst case around 0.5 mm.
+const MAX_OVERLAP = 0.002;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -34,6 +40,39 @@ function parseArgs() {
     opponent: get("--vs", difficulty),
     verbose: args.includes("--verbose"),
   };
+}
+
+/**
+ * Checked while the balls are still moving, not only where they stop.
+ *
+ * Two balls sharing space and a ball inside a cushion are the two failures a
+ * viewer would notice immediately and no resting-position check can see, since
+ * both are resolved before the shot ends.
+ */
+function checkMidFlight(balls, table, t, worst) {
+  const R = BALL.radius;
+  for (let i = 0; i < balls.length; i++) {
+    const a = balls[i];
+    if (a.pocketed) continue;
+    const out = Math.max(R - a.x, a.x - (table.length - R), R - a.y, a.y - (table.width - R));
+    if (out > MAX_OVERLAP) {
+      throw new Error(
+        `ball ${a.number} was ${(out * 1000).toFixed(2)} mm inside a cushion at t=${t.toFixed(3)} s`
+      );
+    }
+    for (let j = i + 1; j < balls.length; j++) {
+      const b = balls[j];
+      if (b.pocketed) continue;
+      const overlap = 2 * R - Math.hypot(b.x - a.x, b.y - a.y);
+      if (overlap > worst.overlap) worst.overlap = overlap;
+      if (overlap > MAX_OVERLAP) {
+        throw new Error(
+          `balls ${a.number} and ${b.number} overlapped by ` +
+            `${(overlap * 1000).toFixed(2)} mm at t=${t.toFixed(3)} s`
+        );
+      }
+    }
+  }
 }
 
 function checkInvariants(state, shotNumber) {
@@ -60,7 +99,7 @@ function checkInvariants(state, shotNumber) {
   }
 }
 
-async function playGame(seed, difficulties, verbose) {
+async function playGame(seed, difficulties, verbose, worst) {
   const state = createGame(seed);
   const rng = mulberry32(seed ^ 0x9e3779b9);
   let shots = 0;
@@ -82,7 +121,11 @@ async function playGame(seed, difficulties, verbose) {
     const decision = await chooseShot(state, { difficulty: difficulties[shooter], rng });
     const cue = state.balls.find((b) => b.number === 0);
     applyShot(cue, decision.shot);
-    const events = simulateToRest(state.balls, state.table, { dt: GAME_DT, maxTime: 15 });
+    const events = simulateToRest(state.balls, state.table, {
+      dt: GAME_DT,
+      maxTime: 15,
+      onStep: (balls, t) => checkMidFlight(balls, state.table, t, worst),
+    });
     const outcome = resolveShot(state, events, context);
 
     shots++;
@@ -118,9 +161,10 @@ async function main() {
 
   const started = Date.now();
   const results = [];
+  const worst = { overlap: 0 };
   for (let i = 0; i < games; i++) {
     if (verbose) console.log(`game ${i}`);
-    results.push(await playGame(1000 + i, difficulties, verbose));
+    results.push(await playGame(1000 + i, difficulties, verbose, worst));
   }
 
   const elapsed = (Date.now() - started) / 1000;
@@ -134,6 +178,10 @@ async function main() {
   console.log(`  ${((potted / shots) * 100).toFixed(0)}% of shots potted a ball`);
   console.log(`  ${((fouls / shots) * 100).toFixed(0)}% of shots fouled`);
   console.log(`  "${difficulty}" won ${wins}/${games}`);
+  console.log(
+    `  worst ball overlap while moving ${(worst.overlap * 1000).toFixed(3)} mm ` +
+      `on a ${(2 * BALL.radius * 1000).toFixed(1)} mm ball`
+  );
   console.log("  every game reached a legal conclusion");
 }
 

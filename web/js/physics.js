@@ -488,13 +488,16 @@ export function newEvents() {
  * Mirrors the reference loop, including the requirement that the table stay at
  * rest for a while before the shot is called over.
  */
-export function simulateToRest(balls, table, { dt = 0.002, maxTime = 10 } = {}) {
+export function simulateToRest(balls, table, { dt = 0.002, maxTime = 10, onStep = null } = {}) {
   const events = newEvents();
   let restSteps = 0;
   const steps = Math.floor(maxTime / dt);
   let step = 0;
   for (; step < steps; step++) {
     stepWorld(balls, table, dt, events);
+    // Test seam. The bot calls this thousands of times a turn and passes
+    // nothing, so the cost is one comparison per step.
+    if (onStep) onStep(balls, step * dt);
     if (anyBallMoving(balls)) {
       restSteps = 0;
     } else {
