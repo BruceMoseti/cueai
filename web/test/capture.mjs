@@ -25,8 +25,12 @@ const CHROME_CANDIDATES = [
 ].filter(Boolean);
 
 // Long enough to get past the break and through several shots on an open
-// table. A clip that is mostly one break says very little about the game.
-const GIF_SECONDS = 20;
+// table. A clip that is mostly one break says very little about the game, and
+// one that costs two megabytes is a README nobody scrolls.
+const GIF_SECONDS = 15;
+// How much of each of the bot's searches to leave in. Enough to read as a
+// pause for thought; not the two seconds it actually takes at full strength.
+const THINKING_SECONDS = 0.8;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -94,6 +98,29 @@ const AIM_AT_BEST_POT = () => {
   if (!best) return false;
   window.cueai.aim(best.angle);
   window.cueai.setPower(0.34);
+  return true;
+};
+
+/**
+ * Aim at whatever is legal, for when no pot is on.
+ *
+ * Without this the recording stops at the first snookered layout, which is
+ * both common and early, and the clip becomes a break and one shot.
+ */
+const AIM_AT_ANY_LEGAL = () => {
+  const s = window.cueai.state;
+  const cue = s.balls.find((b) => b.number === 0);
+  const suit = (n) => (n === 8 ? "eight" : n <= 7 ? "solid" : "stripe");
+  const mine = s.groups.you;
+  const onTable = s.balls.filter((b) => !b.pocketed && b.number !== 0);
+  let targets = mine ? onTable.filter((b) => suit(b.number) === mine) : onTable;
+  if (!targets.length) targets = onTable;
+  if (!targets.length) return false;
+  const near = targets.reduce((a, b) =>
+    Math.hypot(b.x - cue.x, b.y - cue.y) < Math.hypot(a.x - cue.x, a.y - cue.y) ? b : a
+  );
+  window.cueai.aim(Math.atan2(near.y - cue.y, near.x - cue.x));
+  window.cueai.setPower(0.3);
   return true;
 };
 
@@ -209,6 +236,42 @@ async function captureInspector(page, panel, file) {
   return false;
 }
 
+/**
+ * Say how far the break opened the rack, and refuse a clip of one that did not.
+ *
+ * The first two seconds of the clip are the break, so a mis-struck one is the
+ * loudest claim the documentation makes. It is also easy to make by accident
+ * and hard to notice afterwards, since a rack that stays standing looks like a
+ * physics limitation rather than a badly aimed cue.
+ */
+async function reportBreak(page, before) {
+  const spread = await page.evaluate((prior) => {
+    const live = window.cueai.state.balls.filter((b) => !b.pocketed && b.number !== 0);
+    const cx = live.reduce((a, b) => a + b.x, 0) / live.length;
+    const cy = live.reduce((a, b) => a + b.y, 0) / live.length;
+    const moved = live.filter((b, i) => Math.hypot(b.x - prior[i][0], b.y - prior[i][1]) > 0.05);
+    return {
+      centroid: live.reduce((a, b) => a + Math.hypot(b.x - cx, b.y - cy), 0) / live.length,
+      moved: moved.length,
+      potted: 15 - live.length,
+    };
+  }, before);
+  console.log(
+    `break: ${spread.moved}/15 balls moved more than 5 cm, ` +
+      `mean ${(spread.centroid * 100).toFixed(0)} cm from the pack centre, ` +
+      `${spread.potted} potted`
+  );
+  // Displacement rather than the spread of the pack, because potting a ball
+  // removes it from the pack and so *lowers* a spread measured over what is
+  // left. Clipping the apex moves five balls; hitting it moves twelve.
+  if (spread.moved < 10) {
+    throw new Error(
+      `the break only moved ${spread.moved} of 15 balls; a clip of that would ` +
+        `misrepresent the simulator`
+    );
+  }
+}
+
 async function main() {
   const { url, out, seconds, noVideo } = parseArgs();
 
@@ -235,22 +298,39 @@ async function main() {
     await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
     await page.waitForFunction(() => window.cueai !== undefined, { timeout: 10000 });
     await page.select("#difficulty", "sharp");
-    await page.select("#playback", "1.8");
+    // "Quick". The last seconds of a pool shot are balls creeping to a halt,
+    // which is honest physics and dull footage; the page offers the speed, so
+    // the recording uses it rather than editing the tails out afterwards.
+    await page.select("#playback", "3");
 
-    // Break, so the layout in the images is one the simulator produced.
+    // Break, so the layout in the images is one the simulator produced. The
+    // line is computed to the apex ball rather than guessed at: an earlier
+    // hard-coded angle arrived 33 mm off it, and a break that clips the apex
+    // leaves the rack standing, which made the clip an advertisement for a
+    // problem the simulator does not have.
     await page.evaluate(() => {
       const s = window.cueai.state;
       window.cueai.place(s.table.length * 0.2, s.table.width * 0.52);
-      window.cueai.aim(0.006);
+      const cue = s.balls.find((b) => b.number === 0);
+      const apex = s.balls
+        .filter((b) => !b.pocketed && b.number !== 0)
+        .reduce((a, b) => (b.x < a.x ? b : a));
+      // The same fraction off square the bot uses: dead centre sends the
+      // energy back down the table instead of into the corners.
+      window.cueai.aim(Math.atan2(apex.y - cue.y, apex.x - cue.x) + 0.004);
       window.cueai.setPower(0.95);
     });
+    const before = await page.evaluate(() =>
+      window.cueai.state.balls.filter((b) => b.number !== 0).map((b) => [b.x, b.y])
+    );
 
     const frames = noVideo || !haveFfmpeg ? null : await startScreencast(page);
     await page.evaluate(() => window.cueai.shoot());
     await settle(page);
+    await reportBreak(page, before);
 
     // Real shots, so the trace and the bot panel have content.
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 30; i++) {
       const mode = await page.evaluate(() => window.cueai.mode);
       if (mode === "over") break;
       if (mode === "placing") {
@@ -259,7 +339,8 @@ async function main() {
           window.cueai.place(s.table.length * (s.behindHeadString ? 0.2 : 0.45), s.table.width * 0.5);
         });
       }
-      const aimed = await page.evaluate(AIM_AT_BEST_POT);
+      const aimed =
+        (await page.evaluate(AIM_AT_BEST_POT)) || (await page.evaluate(AIM_AT_ANY_LEGAL));
       if (!aimed) break;
       await page.evaluate(() => window.cueai.shoot());
       await settle(page);
@@ -267,8 +348,8 @@ async function main() {
     }
 
     if (frames) {
-      const clip = await frames.stop();
-      writeVideo(clip, out);
+      const { shots, marks } = await frames.stop();
+      writeVideo(labelFrames(shots, marks), out);
     }
 
     // Line up a shot for the stills, then hold it.
@@ -310,6 +391,15 @@ async function startScreencast(page) {
       /* the session closes while frames are still in flight */
     }
   });
+  // What the page was doing when each frame was painted, sampled in the page so
+  // it costs no round trips. Used to find the stretches where the bot is
+  // searching and nothing on the table moves.
+  await page.evaluate(() => {
+    window.__modeMarks = [];
+    window.__modeTimer = setInterval(() => {
+      window.__modeMarks.push([performance.timeOrigin + performance.now(), window.cueai.mode]);
+    }, 60);
+  });
   await client.send("Page.startScreencast", {
     format: "jpeg",
     quality: 92,
@@ -322,9 +412,29 @@ async function startScreencast(page) {
     async stop() {
       await client.send("Page.stopScreencast");
       await client.detach();
-      return shots;
+      const marks = await page.evaluate(() => {
+        clearInterval(window.__modeTimer);
+        return window.__modeMarks;
+      });
+      return { shots, marks };
     },
   };
+}
+
+/**
+ * Tag each frame with what the page was doing when it was painted.
+ *
+ * Both clocks are milliseconds since the epoch — CDP's frame metadata in
+ * seconds, the page's `timeOrigin + now()` in milliseconds — so they can be
+ * merged by walking them together.
+ */
+function labelFrames(shots, marks) {
+  let i = 0;
+  return shots.map((shot) => {
+    const at = shot.t * 1000;
+    while (i + 1 < marks.length && marks[i + 1][0] <= at) i++;
+    return { ...shot, mode: marks.length ? marks[i][1] : "unknown" };
+  });
 }
 
 function writeVideo(shots, out) {
@@ -336,15 +446,32 @@ function writeVideo(shots, out) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
 
-  const lines = [];
+  // The bot searching is a still table with a progress bar creeping across it,
+  // and at "sharp" it is most of the elapsed time. Left in, the clip is two
+  // thirds nothing; cut out entirely, the game appears to play itself. So the
+  // pause is kept and capped, and the README says the clip is trimmed there.
+  let thinkingFor = 0;
+  const kept = [];
   for (const [i, shot] of shots.entries()) {
-    const name = `f${String(i).padStart(5, "0")}.jpg`;
-    writeFileSync(path.join(dir, name), Buffer.from(shot.data, "base64"));
     const next = shots[i + 1];
     const dt = next ? Math.min(0.5, Math.max(0.016, next.t - shot.t)) : 0.08;
-    lines.push(`file '${name}'`, `duration ${dt.toFixed(4)}`);
+    if (shot.mode === "thinking") {
+      thinkingFor += dt;
+      if (thinkingFor > THINKING_SECONDS) continue;
+    } else {
+      thinkingFor = 0;
+    }
+    kept.push({ data: shot.data, dt });
   }
-  lines.push(`file 'f${String(shots.length - 1).padStart(5, "0")}.jpg'`);
+  const trimmed = shots.length - kept.length;
+
+  const lines = [];
+  for (const [i, frame] of kept.entries()) {
+    const name = `f${String(i).padStart(5, "0")}.jpg`;
+    writeFileSync(path.join(dir, name), Buffer.from(frame.data, "base64"));
+    lines.push(`file '${name}'`, `duration ${frame.dt.toFixed(4)}`);
+  }
+  lines.push(`file 'f${String(kept.length - 1).padStart(5, "0")}.jpg'`);
   const listFile = path.join(dir, "frames.txt");
   writeFileSync(listFile, lines.join("\n"));
 
@@ -361,7 +488,7 @@ function writeVideo(shots, out) {
   // reliably. Trimmed, smaller and slower-sampled than the clip, because a
   // README that costs four megabytes to open is a README nobody scrolls.
   const palette = path.join(dir, "palette.png");
-  const gifFilter = "fps=10,scale=720:-1:flags=lanczos";
+  const gifFilter = "fps=10,scale=680:-1:flags=lanczos";
   run("ffmpeg", [
     "-y", "-loglevel", "error", "-t", String(GIF_SECONDS), "-i", mp4,
     "-vf", `${gifFilter},palettegen=stats_mode=diff`,
@@ -374,7 +501,10 @@ function writeVideo(shots, out) {
   ]);
 
   rmSync(dir, { recursive: true, force: true });
-  console.log(`wrote ${shots.length} frames to ${mp4} and web_demo.gif`);
+  console.log(
+    `wrote ${kept.length} frames to ${mp4} and web_demo.gif ` +
+      `(${trimmed} trimmed from the bot's searches)`
+  );
 }
 
 function run(cmd, args) {

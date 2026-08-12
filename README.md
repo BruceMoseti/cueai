@@ -26,6 +26,10 @@ closed-form references.
 
 ![Eight-ball against the search bot, in the browser](docs/assets/web_demo.gif)
 
+*Recorded by `web/test/capture.mjs` driving the real page in Chrome, at the
+"Quick" playback the page offers, with the bot's search pauses capped at
+0.8 s. The shots are the game's, not an animation.*
+
 No install, no build step, no framework — `web/` is plain ES modules, and the
 whole thing is served as static files. Aim with the mouse, drag back from the
 cue ball to strike, click the cue-ball diagram to move the tip off centre. Every
