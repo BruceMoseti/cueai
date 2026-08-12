@@ -24,7 +24,9 @@ const CHROME_CANDIDATES = [
   "/usr/bin/chromium-browser",
 ].filter(Boolean);
 
-const GIF_SECONDS = 12;
+// Long enough to get past the break and through several shots on an open
+// table. A clip that is mostly one break says very little about the game.
+const GIF_SECONDS = 20;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -35,7 +37,7 @@ function parseArgs() {
   return {
     url: get("--url", "http://localhost:8123/index.html"),
     out: get("--out", "docs/assets"),
-    seconds: Number(get("--seconds", 16)),
+    seconds: Number(get("--seconds", 24)),
     noVideo: args.includes("--no-video"),
   };
 }
@@ -128,12 +130,27 @@ const AIM_INTO_OPEN_SPACE = () => {
       const off = Math.abs((b.x - cue.x) * dy - (b.y - cue.y) * dx);
       if (off < 2 * R) clear = Math.min(clear, along);
     }
+    // A heading down a pocket is disqualified rather than shortened: the cue
+    // ball dropping ends the trace in the middle of the roll, which is a fine
+    // thing for the panel to say and a poor thing for it to be a picture of.
+    const scratches = s.table.pockets.some(([px, py]) => {
+      const along = (px - cue.x) * dx + (py - cue.y) * dy;
+      if (along <= 0) return false;
+      const off = Math.abs((px - cue.x) * dy - (py - cue.y) * dx);
+      return off < s.table.pocketRadius + R && along <= clear + s.table.pocketRadius;
+    });
+    if (scratches) continue;
     if (!best || clear > best.clear) best = { clear, angle };
   }
+  if (!best) return 0;
   window.cueai.aim(best.angle);
-  // Enough to slide for a visible fraction of a second, not enough to reach
-  // the far rail before it starts rolling.
-  window.cueai.setPower(0.32);
+  // A ball struck at v slides 12v²/(49 μ g) before it rolls, so the stroke is
+  // sized to finish that inside the clear line with room to spare. Too hard and
+  // it reaches a rail mid-slide, which withdraws the prediction just as surely
+  // as hitting a ball does.
+  const slideRoom = 0.55 * best.clear;
+  const v = Math.sqrt((slideRoom * 49 * 0.2 * 9.81) / 12);
+  window.cueai.setPower(Math.max(0.12, Math.min(0.6, v / 7.5)));
   return best.clear;
 };
 
@@ -142,6 +159,54 @@ async function settle(page, timeout = 45000) {
     timeout,
     polling: 100,
   });
+}
+
+/** Wait for the balls to stop, which is earlier than waiting for the turn. */
+async function settleShot(page, timeout = 45000) {
+  await page.waitForFunction(() => !["rolling", "stroking"].includes(window.cueai.mode), {
+    timeout,
+    polling: 50,
+  });
+}
+
+/**
+ * Photograph the inspector showing a shot it can be held to.
+ *
+ * Two things make this more than a screenshot call. The panel traces whichever
+ * ball was last struck, the bot's included, so the still has to be taken in the
+ * gap between the cue ball stopping and the opponent replying. And the 5/7·v₀
+ * line is only drawn when the shot stayed clean, which is the entire reason for
+ * taking the picture — so the legend is read back before the shutter, and a
+ * shot that touched something first buys another turn rather than a caption
+ * explaining why the interesting line is missing.
+ */
+async function captureInspector(page, panel, file) {
+  const showsPrediction = () =>
+    document.getElementById("trace-legend").textContent.includes("5/7·v₀ =");
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await settle(page);
+    if (await page.evaluate(() => window.cueai.mode === "over")) break;
+    await page.evaluate(() => {
+      if (window.cueai.mode === "placing") {
+        const s = window.cueai.state;
+        window.cueai.place(s.table.length * 0.45, s.table.width * 0.5);
+      }
+    });
+    // With no clean line available, play a pot instead: it rearranges the
+    // table, which is what the next attempt needs.
+    const clear = await page.evaluate(AIM_INTO_OPEN_SPACE);
+    if (!clear && !(await page.evaluate(AIM_AT_BEST_POT))) break;
+    await page.evaluate(() => window.cueai.shoot());
+    await settleShot(page);
+    if (await page.evaluate(showsPrediction)) {
+      await panel.screenshot({ path: file });
+      return true;
+    }
+  }
+  console.log("no clean slide-to-roll came up; the inspector still is of whatever was last hit");
+  await panel.screenshot({ path: file });
+  return false;
 }
 
 async function main() {
@@ -184,8 +249,8 @@ async function main() {
     await page.evaluate(() => window.cueai.shoot());
     await settle(page);
 
-    // A couple of real shots, so the trace and the bot panel have content.
-    for (let i = 0; i < 4; i++) {
+    // Real shots, so the trace and the bot panel have content.
+    for (let i = 0; i < 8; i++) {
       const mode = await page.evaluate(() => window.cueai.mode);
       if (mode === "over") break;
       if (mode === "placing") {
@@ -221,13 +286,7 @@ async function main() {
     const panels = await page.$$("aside .panel");
     await panels[2].screenshot({ path: path.join(out, "web_bot.png") });
 
-    // The inspector still gets a shot picked for it: see AIM_INTO_OPEN_SPACE.
-    if (await page.evaluate(() => window.cueai.mode === "aim")) {
-      await page.evaluate(AIM_INTO_OPEN_SPACE);
-      await page.evaluate(() => window.cueai.shoot());
-      await settle(page);
-    }
-    await panels[1].screenshot({ path: path.join(out, "web_inspector.png") });
+    await captureInspector(page, panels[1], path.join(out, "web_inspector.png"));
     await page.evaluate(() => document.getElementById("how").scrollIntoView());
     await new Promise((r) => setTimeout(r, 250));
     await (await page.$("#how")).screenshot({ path: path.join(out, "web_explainer.png") });
@@ -306,7 +365,7 @@ function writeVideo(shots, out) {
   // reliably. Trimmed, smaller and slower-sampled than the clip, because a
   // README that costs four megabytes to open is a README nobody scrolls.
   const palette = path.join(dir, "palette.png");
-  const gifFilter = "fps=12,scale=760:-1:flags=lanczos";
+  const gifFilter = "fps=10,scale=720:-1:flags=lanczos";
   run("ffmpeg", [
     "-y", "-loglevel", "error", "-t", String(GIF_SECONDS), "-i", mp4,
     "-vf", `${gifFilter},palettegen=stats_mode=diff`,
