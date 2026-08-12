@@ -167,6 +167,84 @@ header.masthead {
   }
 }
 
+/* ---------- shot log ---------- */
+
+.shotlog {
+  margin-top: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px 6px;
+}
+
+.shotlog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--ink-dim);
+}
+
+.shotlog-head span + span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.shotlog ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.shotlog li {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+}
+
+.shotlog li:first-child {
+  border-top: none;
+}
+
+.shotlog li.empty {
+  color: var(--ink-faint);
+  font-family: inherit;
+}
+
+.shotlog .who {
+  flex: 0 0 34px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.shotlog .who.bot {
+  color: var(--warn);
+}
+
+.shotlog .what {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shotlog .why {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+}
+
+.shotlog .why.foul {
+  color: var(--warn);
+}
+
 .spin-widget {
   text-align: center;
 }

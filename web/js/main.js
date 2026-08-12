@@ -61,6 +61,7 @@ const ui = {
   showTargets: el("show-targets"),
   botProgress: el("bot-progress"),
   botReport: el("bot-report"),
+  shotlog: el("shotlog-list"),
   banner: el("banner"),
   bannerTitle: el("banner-title"),
   bannerText: el("banner-text"),
@@ -648,6 +649,46 @@ function pip(number) {
   );
 }
 
+const LOG_ROWS = 6;
+
+/**
+ * The last few shots, as the rules engine saw them.
+ *
+ * A foul is a claim about what happened — which ball was struck first, whether
+ * anything reached a rail afterwards — and a game that announces only the
+ * verdict is asking to be taken on trust. Every shot the referee judged stays
+ * on screen with the reason it was judged that way.
+ */
+function renderShotLog() {
+  if (!history.length) {
+    ui.shotlog.innerHTML =
+      `<li class="empty">Nothing yet. Place the cue ball behind the head string and break.</li>`;
+    return;
+  }
+
+  ui.shotlog.innerHTML = history
+    .slice(-LOG_ROWS)
+    .reverse()
+    .map((h) => {
+      const objects = h.potted.filter((n) => n !== 0);
+      const what = [];
+      if (h.wasBreak) what.push("break");
+      if (objects.length) what.push(`potted ${objects.map((n) => `the ${n}`).join(", ")}`);
+      else if (!h.wasBreak) {
+        what.push(h.firstContact === null ? "hit nothing" : `hit the ${h.firstContact} first`);
+      }
+      if (h.cushions) what.push(`${h.cushions} rail${h.cushions === 1 ? "" : "s"}`);
+      const why = h.foul ? h.fouls[0] : h.continues ? "keeps the table" : "turn passes";
+      const bot = h.shooter === BOT;
+      return (
+        `<li><span class="who${bot ? " bot" : ""}">${bot ? "Bot" : "You"}</span>` +
+        `<span class="what">${what.join(", ")}</span>` +
+        `<span class="why${h.foul ? " foul" : ""}">${why}</span></li>`
+      );
+    })
+    .join("");
+}
+
 function syncUI() {
   const thinking = mode === "thinking";
   const rolling = mode === "rolling";
@@ -668,6 +709,7 @@ function syncUI() {
   }
 
   ui.message.innerHTML = messageHtml;
+  renderShotLog();
 
   for (const [who, groupEl, ballsEl, cardEl] of [
     [YOU, ui.groupYou, ui.ballsYou, ui.cardYou],
