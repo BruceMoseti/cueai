@@ -183,16 +183,61 @@ def render_markdown(latency: dict, metrics: dict | None) -> str:
                 f"{row['gbm']:.0f} | {row['cuenet']:.0f} |"
             )
 
+    if metrics and metrics.get("by_object_ball_contact"):
+        lines += [
+            "",
+            "## Reading the object-ball number honestly",
+            "",
+            "Only about a third of sampled shots actually hit the object ball. For the "
+            "rest it stays where it started, which the closed-form baseline predicts "
+            "exactly, so those rows contribute almost no object-ball error to any model. "
+            "Split out, in mm:",
+            "",
+            "| Ball-ball contact | Shots | Share | Closed form cue / object | "
+            "Gradient boosting cue / object | CueNet cue / object |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+        for row in metrics["by_object_ball_contact"]:
+            cells = " | ".join(
+                f"{row[f'{model}_cue_mm']:.0f} / {row[f'{model}_obj_mm']:.0f}"
+                for model in ("analytic", "gbm", "cuenet")
+            )
+            lines.append(
+                f"| {row['object_ball_contact']} | {row['n']} | "
+                f"{row['share_pct']:.1f}% | {cells} |"
+            )
+
+    if metrics and metrics.get("feature_ablation"):
+        ablation = metrics["feature_ablation"]
+        lines += [
+            "",
+            "## Feature ablation",
+            "",
+            "Same architecture, epochs, seed and split; the ablated model sees only raw "
+            "shot parameters, with none of the closed-form solver's conclusions. This is "
+            "the measurement behind the claim that the features carry this result:",
+            "",
+            "| CueNet inputs | All shots | Direct shots (no cushion) |",
+            "|---|---:|---:|",
+            f"| Raw shot parameters only | {ablation['shot_features_only_mm']:.0f} mm | "
+            f"{ablation['shot_features_only_direct_mm']:.0f} mm |",
+            f"| Plus closed-form output | {ablation['with_closed_form_features_mm']:.0f} mm | "
+            f"{ablation['with_closed_form_features_direct_mm']:.0f} mm |",
+            f"| _closed form alone, for reference_ | "
+            f"{metrics['models']['analytic']['euclidean_mm']:.0f} mm | "
+            f"{ablation['analytic_direct_mm']:.0f} mm |",
+        ]
+
     if metrics and metrics.get("risk_coverage"):
         lines += [
             "",
             "## Knowing which predictions to trust",
             "",
-            "The table above slices by what the simulator did, which is only knowable "
-            "after paying for the simulation. This one slices by the cushion count the "
-            "closed-form solver *expects*, which is already computed as part of making "
-            "the prediction and therefore costs nothing extra. Answering only the shots "
-            "below a threshold trades coverage for accuracy:",
+            "The cushion-contact breakdown above slices by what the simulator did, which "
+            "is only knowable after paying for the simulation. This table slices by the "
+            "cushion count the closed-form solver *expects*, which is already computed as "
+            "part of making the prediction and therefore costs nothing extra. Answering "
+            "only the shots below a threshold trades coverage for accuracy:",
             "",
             "| Expected cushions | Shots answered | Coverage | Closed form | "
             "Gradient boosting | CueNet residual |",

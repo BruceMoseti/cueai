@@ -2,8 +2,9 @@
 .DEFAULT_GOAL := help
 
 PY ?= python3
+# Defaults reproduce the published numbers in models/metrics.json.
 SAMPLES ?= 20000
-EPOCHS ?= 200
+EPOCHS ?= 300
 
 help:  ## Show available targets
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'

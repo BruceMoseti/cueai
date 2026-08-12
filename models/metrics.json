@@ -64,6 +64,30 @@
       "cuenet_spread_ratio": 0.8685411810874939
     }
   ],
+  "by_object_ball_contact": [
+    {
+      "object_ball_contact": "no",
+      "n": 2704,
+      "share_pct": 67.6,
+      "analytic_cue_mm": 584.984130859375,
+      "analytic_obj_mm": 1.0874216968659312e-05,
+      "gbm_cue_mm": 467.8886198252336,
+      "gbm_obj_mm": 76.08049265392877,
+      "cuenet_cue_mm": 411.0569763183594,
+      "cuenet_obj_mm": 17.788074493408203
+    },
+    {
+      "object_ball_contact": "yes",
+      "n": 1296,
+      "share_pct": 32.4,
+      "analytic_cue_mm": 1031.7999267578125,
+      "analytic_obj_mm": 797.30615234375,
+      "gbm_cue_mm": 637.999752189307,
+      "gbm_obj_mm": 605.533257931754,
+      "cuenet_cue_mm": 737.8493041992188,
+      "cuenet_obj_mm": 700.9357299804688
+    }
+  ],
   "risk_coverage": [
     {
       "expected_cushions_at_most": "0",
@@ -106,6 +130,14 @@
       "cuenet": 378.03277587890625
     }
   ],
+  "feature_ablation": {
+    "note": "identical architecture, epochs, seed and split; the ablated model sees only raw shot parameters, not the closed-form solver's output",
+    "shot_features_only_mm": 472.97308349609375,
+    "with_closed_form_features_mm": 378.03277587890625,
+    "shot_features_only_direct_mm": 172.84823608398438,
+    "with_closed_form_features_direct_mm": 97.30941009521484,
+    "analytic_direct_mm": 113.5965805053711
+  },
   "error_reduction_vs_analytic_pct": 23.5,
   "error_reduction_vs_gbm_pct": 1.9,
   "environment": {

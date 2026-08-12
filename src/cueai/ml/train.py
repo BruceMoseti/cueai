@@ -31,7 +31,7 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from cueai.ml.dataset import BASELINE_NAMES, TARGET_NAMES, generate_dataset
-from cueai.ml.features import FEATURE_NAMES, build_feature_frame
+from cueai.ml.features import BASELINE_FEATURE_NAMES, FEATURE_NAMES, build_feature_frame
 from cueai.ml.model import CueNet
 
 # Endpoint targets, in metres: (cue_x, cue_y, obj_x, obj_y)
@@ -101,6 +101,36 @@ def stratify_by_contacts(
     return rows
 
 
+def stratify_by_object_contact(
+    predictions: dict[str, np.ndarray], truth: np.ndarray, n_collision: np.ndarray
+) -> list[dict]:
+    """
+    Split accuracy by whether the cue ball ever touched the object ball.
+
+    This matters for reading the headline number honestly. Sampling aims roughly
+    half the shots at the object ball and misses often, so most shots leave it
+    where it started — and since the closed-form baseline predicts exactly that,
+    the object-ball half of the reported error is trivially satisfied for them.
+    Averaging the two subsets together would flatter every model equally; the
+    split shows what each one does when a collision actually has to be modelled.
+    """
+    rows = []
+    for label, mask in (("no", n_collision == 0), ("yes", n_collision > 0)):
+        if not mask.any():
+            continue
+        row: dict = {
+            "object_ball_contact": label,
+            "n": int(mask.sum()),
+            "share_pct": round(100.0 * float(mask.mean()), 1),
+        }
+        for name, pred in predictions.items():
+            errors = endpoint_errors(pred[mask], truth[mask])
+            row[f"{name}_cue_mm"] = errors["cue_mm"]
+            row[f"{name}_obj_mm"] = errors["obj_mm"]
+        rows.append(row)
+    return rows
+
+
 def risk_coverage(
     predictions: dict[str, np.ndarray], truth: np.ndarray, expected_cushions: np.ndarray
 ) -> list[dict]:
@@ -164,12 +194,14 @@ def train_cuenet(
     lr: float,
     seed: int,
     hidden: int = 256,
+    save: bool = True,
 ) -> tuple[np.ndarray, dict[str, float], list[float]]:
     """
     Fit the residual model, selecting the epoch on a validation split.
 
     The test split is scored exactly once, after training, so no model choice is
-    informed by it.
+    informed by it. ``save=False`` fits a throwaway model for the feature
+    ablation, so the diagnostic cannot overwrite the served artefacts.
     """
     torch.manual_seed(seed)
     fit_x, val_x, fit_base, val_base, fit_y, val_y = train_test_split(
@@ -223,18 +255,19 @@ def train_cuenet(
     with torch.no_grad():
         pred = base_test + net(torch.from_numpy(x_test_s)).numpy()
 
-    torch.save(
-        {
-            "state_dict": net.state_dict(),
-            "scaler_mean": scaler.mean_,
-            "scaler_scale": scaler.scale_,
-            "feature_names": FEATURE_NAMES,
-            "in_dim": x_train.shape[1],
-            "hidden": hidden,
-        },
-        model_dir / "cuenet.pt",
-    )
-    _export_onnx(net, x_train.shape[1], model_dir / "cuenet.onnx")
+    if save:
+        torch.save(
+            {
+                "state_dict": net.state_dict(),
+                "scaler_mean": scaler.mean_,
+                "scaler_scale": scaler.scale_,
+                "feature_names": FEATURE_NAMES,
+                "in_dim": x_train.shape[1],
+                "hidden": hidden,
+            },
+            model_dir / "cuenet.pt",
+        )
+        _export_onnx(net, x_train.shape[1], model_dir / "cuenet.onnx")
     return pred, endpoint_errors(pred, y_test), history
 
 
@@ -304,7 +337,29 @@ def main(argv: list[str] | None = None) -> dict:
         hidden=args.hidden,
     )
 
+    # Ablation: the same network, epochs and split, but without the closed-form
+    # solver's conclusions among its inputs. This is the measurement behind the
+    # claim that the features, not the architecture, are what let the residual
+    # model beat the physics on the shots physics nearly solves.
+    n_shot_features = len(FEATURE_NAMES) - len(BASELINE_FEATURE_NAMES)
+    ablation_pred, ablation, _ = train_cuenet(
+        x_train[:, :n_shot_features],
+        base_train,
+        y_train,
+        x_test[:, :n_shot_features],
+        base_test,
+        y_test,
+        model_dir,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        seed=args.seed,
+        hidden=args.hidden,
+        save=False,
+    )
+
     predictions = {"analytic": base_test, "gbm": gbm_pred, "cuenet": cuenet_pred}
+    direct = df["n_cushion"].to_numpy()[test_idx] == 0
     metrics = {
         "n_samples": len(df),
         "n_test": len(y_test),
@@ -315,9 +370,29 @@ def main(argv: list[str] | None = None) -> dict:
         "by_cushion_contacts": stratify_by_contacts(
             predictions, y_test, df["n_cushion"].to_numpy()[test_idx]
         ),
+        "by_object_ball_contact": stratify_by_object_contact(
+            predictions, y_test, df["n_collision"].to_numpy()[test_idx]
+        ),
         "risk_coverage": risk_coverage(
             predictions, y_test, x_test[:, FEATURE_NAMES.index("base_cushions")]
         ),
+        "feature_ablation": {
+            "note": (
+                "identical architecture, epochs, seed and split; the ablated model "
+                "sees only raw shot parameters, not the closed-form solver's output"
+            ),
+            "shot_features_only_mm": ablation["euclidean_mm"],
+            "with_closed_form_features_mm": cuenet["euclidean_mm"],
+            "shot_features_only_direct_mm": endpoint_errors(
+                ablation_pred[direct], y_test[direct]
+            )["euclidean_mm"],
+            "with_closed_form_features_direct_mm": endpoint_errors(
+                cuenet_pred[direct], y_test[direct]
+            )["euclidean_mm"],
+            "analytic_direct_mm": endpoint_errors(base_test[direct], y_test[direct])[
+                "euclidean_mm"
+            ],
+        },
         "error_reduction_vs_analytic_pct": round(
             100 * (1 - cuenet["euclidean_mm"] / analytic["euclidean_mm"]), 1
         ),

@@ -9,11 +9,11 @@ Regenerate with `python scripts/benchmark.py`. Single CPU core, no GPU.
 
 | Method | Mean | Median | p95 | Speedup vs full rack |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16-ball rack | 35.2 s | 35.4 s | 35.5 s | — |
-| Numerical simulator, cue + object ball | 333.9 ms | 333.8 ms | 335.2 ms | 105x |
-| Closed-form solver (no ML) | 0.256 ms | 0.254 ms | 0.264 ms | 137,489x |
-| Gradient boosting on the same features | 2.5 ms | 2.5 ms | 2.6 ms | 13,997x |
-| Closed form + CueNet residual (ONNX Runtime) | 0.568 ms | 0.563 ms | 0.583 ms | 61,985x |
+| Numerical simulator, 16-ball rack | 36.8 s | 36.7 s | 37.2 s | — |
+| Numerical simulator, cue + object ball | 345.1 ms | 345.1 ms | 345.7 ms | 107x |
+| Closed-form solver (no ML) | 0.261 ms | 0.259 ms | 0.270 ms | 140,996x |
+| Gradient boosting on the same features | 2.5 ms | 2.5 ms | 2.6 ms | 14,454x |
+| Closed form + CueNet residual (ONNX Runtime) | 0.584 ms | 0.571 ms | 0.593 ms | 63,032x |
 | CueNet forward pass only, batch of 1024 (per shot) | 0.6 us | 0.6 us | 0.7 us | — |
 
 ## Accuracy on held-out shots
@@ -37,9 +37,28 @@ Resting position is a smooth function of the shot until the ball starts ricochet
 | 2 | 875 | 370 | 291 | 288 |
 | 3+ | 2061 | 708 | 522 | 531 |
 
+## Reading the object-ball number honestly
+
+Only about a third of sampled shots actually hit the object ball. For the rest it stays where it started, which the closed-form baseline predicts exactly, so those rows contribute almost no object-ball error to any model. Split out, in mm:
+
+| Ball-ball contact | Shots | Share | Closed form cue / object | Gradient boosting cue / object | CueNet cue / object |
+|---|---:|---:|---:|---:|---:|
+| no | 2704 | 67.6% | 585 / 0 | 468 / 76 | 411 / 18 |
+| yes | 1296 | 32.4% | 1032 / 797 | 638 / 606 | 738 / 701 |
+
+## Feature ablation
+
+Same architecture, epochs, seed and split; the ablated model sees only raw shot parameters, with none of the closed-form solver's conclusions. This is the measurement behind the claim that the features carry this result:
+
+| CueNet inputs | All shots | Direct shots (no cushion) |
+|---|---:|---:|
+| Raw shot parameters only | 473 mm | 173 mm |
+| Plus closed-form output | 378 mm | 97 mm |
+| _closed form alone, for reference_ | 494 mm | 114 mm |
+
 ## Knowing which predictions to trust
 
-The table above slices by what the simulator did, which is only knowable after paying for the simulation. This one slices by the cushion count the closed-form solver *expects*, which is already computed as part of making the prediction and therefore costs nothing extra. Answering only the shots below a threshold trades coverage for accuracy:
+The cushion-contact breakdown above slices by what the simulator did, which is only knowable after paying for the simulation. This table slices by the cushion count the closed-form solver *expects*, which is already computed as part of making the prediction and therefore costs nothing extra. Answering only the shots below a threshold trades coverage for accuracy:
 
 | Expected cushions | Shots answered | Coverage | Closed form | Gradient boosting | CueNet residual |
 |---|---:|---:|---:|---:|---:|
