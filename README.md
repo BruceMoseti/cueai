@@ -1,8 +1,14 @@
-# CueAI
+# Pocket Physics
 
+### ▶ [Play eight-ball against the bot][play] — in the browser, nothing to install
+
+[![Play](https://img.shields.io/badge/play-eight--ball%20in%20the%20browser-12594a)][play]
 [![CI](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml/badge.svg)](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+Pocket billiards, simulated properly — then made small enough to fit in a
+browser tab.
 
 **A physics simulator for billiards, a closed-form solution that replaces it, and
 a learned model that corrects what the closed form misses — roughly 7,600x
@@ -22,7 +28,7 @@ closed-form references.
 
 ## Play it
 
-### **[▶ Play eight-ball against the bot](https://brucemoseti.github.io/cueai/)**
+**[▶ Open the table and break][play]**
 
 ![Eight-ball against the search bot, in the browser](docs/assets/web_demo.gif)
 
@@ -40,7 +46,7 @@ found afterwards, and which of those facts made a shot a foul.
 ![The whole interface: table, live cue-ball trace, the bot's report and the shot log](docs/assets/web_game.png)
 
 The browser is not running a lookalike physics engine. `web/js/physics.js` is a
-hand port of `src/cueai/physics/`, and the port is measured rather than
+hand port of `src/pocket/physics/`, and the port is measured rather than
 asserted: `scripts/export_parity_cases.py` runs 35 shots through the Python
 simulator — draw, follow, english off two rails, thin cuts, clusters and full
 sixteen-ball breaks — and `web/test/parity.mjs` replays every one of them in
@@ -106,7 +112,7 @@ else is a ball rolling.
 <br clear="right" />
 
 **And there is prose under the table.**
-[The explainer](https://brucemoseti.github.io/cueai/#how) covers the cloth
+[The explainer][explainer] covers the cloth
 model, the parity harness, the bot's search, where the learned surrogate helps
 and where it does not, and
 [the multi-ball contact bug](#the-bug-the-tests-could-not-see) the single-ball
@@ -406,7 +412,7 @@ parity check and a run of headless games have passed.
 ## Repository map
 
 ```
-src/cueai/
+src/pocket/
   physics/
     ball.py         four-state cloth dynamics for one ball
     collisions.py   frictional ball-ball impulses, cushions, pockets
@@ -425,7 +431,7 @@ src/cueai/
 
 web/                 the playable table: dependency-free ES modules
   js/
-    physics.js      hand port of src/cueai/physics/, checked against it
+    physics.js      hand port of src/pocket/physics/, checked against it
     rack.js         the same rack geometry, ported
     game.js         eight-ball rules, fouls, group assignment
     bot.js          closed-form candidate pots, then simulated rollouts
@@ -491,3 +497,8 @@ published ranges in those sources.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- The published game. Renaming the repository moves this URL with it. -->
+
+[play]: https://brucemoseti.github.io/cueai/#play
+[explainer]: https://brucemoseti.github.io/cueai/#how

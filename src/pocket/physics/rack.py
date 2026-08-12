@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cueai.physics.ball import Ball
-from cueai.physics.constants import BallParams, TableParams
+from pocket.physics.ball import Ball
+from pocket.physics.constants import BallParams, TableParams
 
 # Standard pool ball colors (RGB 0-255)
 BALL_COLORS: dict[int, tuple[int, int, int]] = {

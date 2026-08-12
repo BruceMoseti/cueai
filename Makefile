@@ -49,11 +49,11 @@ capture:  ## Re-record the screenshots and the clip in the README
 web: parity selfplay  ## Every check that does not need a browser
 
 play:  ## Serve the game at http://localhost:$(PORT)
-	@echo "CueAI is at http://localhost:$(PORT)"
+	@echo "Pocket Physics is at http://localhost:$(PORT)"
 	@cd web && $(PY) -m http.server $(PORT)
 
 train:  ## Generate data and train the residual model
-	$(PY) -m cueai.ml.train --n-samples $(SAMPLES) --epochs $(EPOCHS)
+	$(PY) -m pocket.ml.train --n-samples $(SAMPLES) --epochs $(EPOCHS)
 
 bench:  ## Measure latency and rewrite docs/BENCHMARKS.md
 	$(PY) scripts/benchmark.py
@@ -65,10 +65,10 @@ facts:  ## Rewrite the numbers the playable page quotes
 	$(PY) scripts/site_facts.py
 
 api:  ## Serve the prediction API on :8000
-	$(PY) -m uvicorn cueai.api.main:app --reload --port 8000
+	$(PY) -m uvicorn pocket.api.main:app --reload --port 8000
 
 ui:  ## Launch the desktop table (needs the ui extra)
-	$(PY) -m cueai.ui.app
+	$(PY) -m pocket.ui.app
 
 all: train bench figures facts  ## Reproduce every published number and figure
 

@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CueAI — play the simulator</title>
+    <title>Pocket Physics — play the simulator</title>
     <meta
       name="description"
-      content="Eight-ball against a search-based bot, running the same validated rigid-body physics as the CueAI Python reference, in the browser."
+      content="Eight-ball against a search-based bot, running the same validated rigid-body physics as the Python reference, in the browser."
     />
     <link rel="stylesheet" href="css/style.css" />
     <link
@@ -17,18 +17,19 @@
   <body>
     <div class="wrap">
       <header class="masthead">
-        <h1>Cue<span>AI</span></h1>
+        <h1>Pocket <span>Physics</span></h1>
         <div class="tag">
           Eight-ball against a search-based opponent, on the same rigid-body physics the
           Python reference is validated against.
         </div>
         <nav>
-          <a href="https://github.com/BruceMoseti/cueai">Repository</a>
+          <a href="#play">Play</a>
           <a href="#how">How it works</a>
+          <a href="https://github.com/BruceMoseti/cueai">Repository</a>
         </nav>
       </header>
 
-      <div class="stage">
+      <div class="stage" id="play">
         <div class="table-column">
           <div class="table-shell">
             <canvas id="table"></canvas>
@@ -236,7 +237,7 @@
             <h3>The browser runs the reference, not a lookalike</h3>
             <p>
               <code>web/js/physics.js</code> is a hand port of
-              <code>src/cueai/physics/</code>, and a port nobody measures is a rumour.
+              <code>src/pocket/physics/</code>, and a port nobody measures is a rumour.
               <code>scripts/export_parity_cases.py</code> runs
               <span data-fact="parity-cases">35</span> shots through the Python simulator —
               draw, follow, english off two rails, thin cuts, clusters, and full sixteen-ball
@@ -338,8 +339,9 @@ make all        # dataset → training → benchmarks → figures</code>
         <footer>
           Physics, rules, rendering and the opponent are in
           <code>web/js/</code>; the reference simulator, the validation suite and the
-          learned surrogate are in <code>src/cueai/</code>. Fouls follow standard eight-ball:
+          learned surrogate are in <code>src/pocket/</code>. Fouls follow standard eight-ball:
           hit your own group first, drive a ball to a rail, and the eight goes last.
+          <a href="#play">Back to the table &uarr;</a>
         </footer>
       </section>
     </div>

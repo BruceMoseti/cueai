@@ -25,10 +25,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from cueai.physics import analytic  # noqa: E402
-from cueai.physics.ball import Ball, MotionState, integrate_ball  # noqa: E402
-from cueai.physics.constants import BallParams, ShotParams, TableParams  # noqa: E402
-from cueai.physics.simulator import Simulator  # noqa: E402
+from pocket.physics import analytic  # noqa: E402
+from pocket.physics.ball import Ball, MotionState, integrate_ball  # noqa: E402
+from pocket.physics.constants import BallParams, ShotParams, TableParams  # noqa: E402
+from pocket.physics.simulator import Simulator  # noqa: E402
 
 ASSETS = ROOT / "docs" / "assets"
 CLOTH = "#12764a"

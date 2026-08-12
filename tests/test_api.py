@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from cueai.api.main import app
+from pocket.api.main import app
 
 SOFT_SHOT = {"speed": 1.5, "angle_deg": 5.0, "full_rack": False, "cue_x": 0.6, "cue_y": 0.6}
 

@@ -1,4 +1,4 @@
-"""PyQt6 interactive CueAI — full 16-ball table."""
+"""PyQt6 interactive Pocket Physics — full 16-ball table."""
 
 from __future__ import annotations
 
@@ -23,10 +23,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from cueai.ml.infer import TrajectoryPredictor
-from cueai.physics.ball import Ball
-from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.rack import make_full_rack
+from pocket.ml.infer import TrajectoryPredictor
+from pocket.physics.ball import Ball
+from pocket.physics.constants import ShotParams, TableParams
+from pocket.physics.rack import make_full_rack
 
 
 class TableCanvas(QWidget):
@@ -211,7 +211,7 @@ class TableCanvas(QWidget):
 
         p.setPen(QColor(210, 230, 210))
         p.setFont(QFont("Avenir Next", 12, QFont.Weight.DemiBold))
-        p.drawText(18, 24, "CueAI — full rack · spin · throw · multi-collision")
+        p.drawText(18, 24, "Pocket Physics — full rack · spin · throw · multi-collision")
 
     def _draw_ball(self, p: QPainter, b: Ball, pos: np.ndarray, br_px: float) -> None:
         c = self.world_to_screen(*pos)
@@ -303,7 +303,7 @@ class TableCanvas(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CueAI — Full Rack Billiards")
+        self.setWindowTitle("Pocket Physics — Full Rack Billiards")
         self.resize(1280, 700)
         root = Path(__file__).resolve().parents[3]
         self.predictor = TrajectoryPredictor(model_dir=root / "models")

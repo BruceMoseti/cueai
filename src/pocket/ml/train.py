@@ -30,9 +30,9 @@ from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-from cueai.ml.dataset import BASELINE_NAMES, TARGET_NAMES, generate_dataset
-from cueai.ml.features import BASELINE_FEATURE_NAMES, FEATURE_NAMES, build_feature_frame
-from cueai.ml.model import CueNet
+from pocket.ml.dataset import BASELINE_NAMES, TARGET_NAMES, generate_dataset
+from pocket.ml.features import BASELINE_FEATURE_NAMES, FEATURE_NAMES, build_feature_frame
+from pocket.ml.model import CueNet
 
 # Endpoint targets, in metres: (cue_x, cue_y, obj_x, obj_y)
 ENDPOINT_TARGETS = TARGET_NAMES[:4]
@@ -291,7 +291,7 @@ def _export_onnx(net: CueNet, in_dim: int, path: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> dict:
-    parser = argparse.ArgumentParser(description="Train CueAI models")
+    parser = argparse.ArgumentParser(description="Train Pocket Physics models")
     parser.add_argument("--n-samples", type=int, default=4000)
     parser.add_argument("--epochs", type=int, default=120)
     parser.add_argument("--batch-size", type=int, default=128)

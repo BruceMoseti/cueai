@@ -1,4 +1,4 @@
-/** Ball identities, colours, and the opening rack. Mirrors `cueai/physics/rack.py`. */
+/** Ball identities, colours, and the opening rack. Mirrors `pocket/physics/rack.py`. */
 
 import { BALL, makeBall } from "./physics.js";
 
@@ -70,7 +70,7 @@ export function rackOrder(seed = 7) {
 }
 
 export function trianglePositions(apex) {
-  // Racked balls touch; see `triangle_positions` in `cueai/physics/rack.py`.
+  // Racked balls touch; see `triangle_positions` in `pocket/physics/rack.py`.
   const gap = 2 * BALL.radius;
   const spots = [];
   for (let row = 0; row < 5; row++) {

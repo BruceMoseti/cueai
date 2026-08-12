@@ -1,4 +1,4 @@
-"""FastAPI backend for CueAI full-rack simulation + prediction."""
+"""FastAPI backend for Pocket Physics full-rack simulation + prediction."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from cueai.ml.dataset import MAX_TIP_OFFSET
-from cueai.ml.infer import TrajectoryPredictor
-from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.rack import make_full_rack
+from pocket.ml.dataset import MAX_TIP_OFFSET
+from pocket.ml.infer import TrajectoryPredictor
+from pocket.physics.constants import ShotParams, TableParams
+from pocket.physics.rack import make_full_rack
 
 API_VERSION = "0.3.0"
 
 app = FastAPI(
-    title="CueAI API",
+    title="Pocket Physics API",
     description=(
         "Physics-informed billiards prediction. /predict runs the full numerical "
         "simulation; /predict/fast returns the closed-form plus learned-residual "
@@ -149,7 +149,7 @@ def table_info() -> dict:
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("cueai.api.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("pocket.api.main:app", host="0.0.0.0", port=8000, reload=True)
 
 
 if __name__ == "__main__":

@@ -84,6 +84,8 @@ header.masthead {
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 20px;
   align-items: start;
+  /* Landing on #play should not put the table flush against the viewport. */
+  scroll-margin-top: 14px;
 }
 
 @media (max-width: 1080px) {

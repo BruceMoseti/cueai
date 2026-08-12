@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cueai.ml.train import endpoint_errors, risk_coverage
+from pocket.ml.train import endpoint_errors, risk_coverage
 
 
 def test_endpoint_errors_measures_distance_not_axes() -> None:

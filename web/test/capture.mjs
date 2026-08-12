@@ -53,7 +53,7 @@ function skip(reason) {
 
 /** Aim at the ghost ball for the straightest clear pot, the way a player would. */
 const AIM_AT_BEST_POT = () => {
-  const s = window.cueai.state;
+  const s = window.pocket.state;
   const cue = s.balls.find((b) => b.number === 0);
   const R = 0.028575;
   const suit = (n) => (n === 8 ? "eight" : n <= 7 ? "solid" : "stripe");
@@ -96,8 +96,8 @@ const AIM_AT_BEST_POT = () => {
     }
   }
   if (!best) return false;
-  window.cueai.aim(best.angle);
-  window.cueai.setPower(0.34);
+  window.pocket.aim(best.angle);
+  window.pocket.setPower(0.34);
   return true;
 };
 
@@ -108,7 +108,7 @@ const AIM_AT_BEST_POT = () => {
  * both common and early, and the clip becomes a break and one shot.
  */
 const AIM_AT_ANY_LEGAL = () => {
-  const s = window.cueai.state;
+  const s = window.pocket.state;
   const cue = s.balls.find((b) => b.number === 0);
   const suit = (n) => (n === 8 ? "eight" : n <= 7 ? "solid" : "stripe");
   const mine = s.groups.you;
@@ -119,8 +119,8 @@ const AIM_AT_ANY_LEGAL = () => {
   const near = targets.reduce((a, b) =>
     Math.hypot(b.x - cue.x, b.y - cue.y) < Math.hypot(a.x - cue.x, a.y - cue.y) ? b : a
   );
-  window.cueai.aim(Math.atan2(near.y - cue.y, near.x - cue.x));
-  window.cueai.setPower(0.3);
+  window.pocket.aim(Math.atan2(near.y - cue.y, near.x - cue.x));
+  window.pocket.setPower(0.3);
   return true;
 };
 
@@ -133,7 +133,7 @@ const AIM_AT_ANY_LEGAL = () => {
  * a shot chosen to be one.
  */
 const AIM_INTO_OPEN_SPACE = () => {
-  const s = window.cueai.state;
+  const s = window.pocket.state;
   const cue = s.balls.find((b) => b.number === 0);
   const R = 0.028575;
   let best = null;
@@ -170,19 +170,19 @@ const AIM_INTO_OPEN_SPACE = () => {
     if (!best || clear > best.clear) best = { clear, angle };
   }
   if (!best) return 0;
-  window.cueai.aim(best.angle);
+  window.pocket.aim(best.angle);
   // A ball struck at v slides 12v²/(49 μ g) before it rolls, so the stroke is
   // sized to finish that inside the clear line with room to spare. Too hard and
   // it reaches a rail mid-slide, which withdraws the prediction just as surely
   // as hitting a ball does.
   const slideRoom = 0.55 * best.clear;
   const v = Math.sqrt((slideRoom * 49 * 0.2 * 9.81) / 12);
-  window.cueai.setPower(Math.max(0.12, Math.min(0.6, v / 7.5)));
+  window.pocket.setPower(Math.max(0.12, Math.min(0.6, v / 7.5)));
   return best.clear;
 };
 
 async function settle(page, timeout = 45000) {
-  await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.cueai.mode), {
+  await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.pocket.mode), {
     timeout,
     polling: 100,
   });
@@ -190,7 +190,7 @@ async function settle(page, timeout = 45000) {
 
 /** Wait for the balls to stop, which is earlier than waiting for the turn. */
 async function settleShot(page, timeout = 45000) {
-  await page.waitForFunction(() => !["rolling", "stroking"].includes(window.cueai.mode), {
+  await page.waitForFunction(() => !["rolling", "stroking"].includes(window.pocket.mode), {
     timeout,
     polling: 50,
   });
@@ -206,27 +206,33 @@ async function settleShot(page, timeout = 45000) {
  * taking the picture — so the legend is read back before the shutter, and a
  * shot that touched something first buys another turn rather than a caption
  * explaining why the interesting line is missing.
+ *
+ * A cue ball that drops after rebounding satisfies the legend and still makes a
+ * poor picture: the trace stops mid-roll and the panel is captioned with a
+ * foul. The heading is chosen to miss the pockets, but only along the line to
+ * the first rail, so the outcome is checked as well as the aim.
  */
 async function captureInspector(page, panel, file) {
   const showsPrediction = () =>
     document.getElementById("trace-legend").textContent.includes("5/7·v₀ =");
+  const cueStillOnTable = () => !window.pocket.state.balls.find((b) => b.number === 0).pocketed;
 
   for (let attempt = 0; attempt < 5; attempt++) {
     await settle(page);
-    if (await page.evaluate(() => window.cueai.mode === "over")) break;
+    if (await page.evaluate(() => window.pocket.mode === "over")) break;
     await page.evaluate(() => {
-      if (window.cueai.mode === "placing") {
-        const s = window.cueai.state;
-        window.cueai.place(s.table.length * 0.45, s.table.width * 0.5);
+      if (window.pocket.mode === "placing") {
+        const s = window.pocket.state;
+        window.pocket.place(s.table.length * 0.45, s.table.width * 0.5);
       }
     });
     // With no clean line available, play a pot instead: it rearranges the
     // table, which is what the next attempt needs.
     const clear = await page.evaluate(AIM_INTO_OPEN_SPACE);
     if (!clear && !(await page.evaluate(AIM_AT_BEST_POT))) break;
-    await page.evaluate(() => window.cueai.shoot());
+    await page.evaluate(() => window.pocket.shoot());
     await settleShot(page);
-    if (await page.evaluate(showsPrediction)) {
+    if (await page.evaluate(showsPrediction) && (await page.evaluate(cueStillOnTable))) {
       await panel.screenshot({ path: file });
       return true;
     }
@@ -246,7 +252,7 @@ async function captureInspector(page, panel, file) {
  */
 async function reportBreak(page, before) {
   const spread = await page.evaluate((prior) => {
-    const live = window.cueai.state.balls.filter((b) => !b.pocketed && b.number !== 0);
+    const live = window.pocket.state.balls.filter((b) => !b.pocketed && b.number !== 0);
     const cx = live.reduce((a, b) => a + b.x, 0) / live.length;
     const cy = live.reduce((a, b) => a + b.y, 0) / live.length;
     const moved = live.filter((b, i) => Math.hypot(b.x - prior[i][0], b.y - prior[i][1]) > 0.05);
@@ -296,7 +302,7 @@ async function main() {
     const page = await browser.newPage();
     await page.setViewport({ width: 1420, height: 940, deviceScaleFactor: 2 });
     await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
-    await page.waitForFunction(() => window.cueai !== undefined, { timeout: 10000 });
+    await page.waitForFunction(() => window.pocket !== undefined, { timeout: 10000 });
     await page.select("#difficulty", "sharp");
     // "Quick". The last seconds of a pool shot are balls creeping to a halt,
     // which is honest physics and dull footage; the page offers the speed, so
@@ -309,40 +315,40 @@ async function main() {
     // leaves the rack standing, which made the clip an advertisement for a
     // problem the simulator does not have.
     await page.evaluate(() => {
-      const s = window.cueai.state;
-      window.cueai.place(s.table.length * 0.2, s.table.width * 0.52);
+      const s = window.pocket.state;
+      window.pocket.place(s.table.length * 0.2, s.table.width * 0.52);
       const cue = s.balls.find((b) => b.number === 0);
       const apex = s.balls
         .filter((b) => !b.pocketed && b.number !== 0)
         .reduce((a, b) => (b.x < a.x ? b : a));
       // The same fraction off square the bot uses: dead centre sends the
       // energy back down the table instead of into the corners.
-      window.cueai.aim(Math.atan2(apex.y - cue.y, apex.x - cue.x) + 0.004);
-      window.cueai.setPower(0.95);
+      window.pocket.aim(Math.atan2(apex.y - cue.y, apex.x - cue.x) + 0.004);
+      window.pocket.setPower(0.95);
     });
     const before = await page.evaluate(() =>
-      window.cueai.state.balls.filter((b) => b.number !== 0).map((b) => [b.x, b.y])
+      window.pocket.state.balls.filter((b) => b.number !== 0).map((b) => [b.x, b.y])
     );
 
     const frames = noVideo || !haveFfmpeg ? null : await startScreencast(page);
-    await page.evaluate(() => window.cueai.shoot());
+    await page.evaluate(() => window.pocket.shoot());
     await settle(page);
     await reportBreak(page, before);
 
     // Real shots, so the trace and the bot panel have content.
     for (let i = 0; i < 30; i++) {
-      const mode = await page.evaluate(() => window.cueai.mode);
+      const mode = await page.evaluate(() => window.pocket.mode);
       if (mode === "over") break;
       if (mode === "placing") {
         await page.evaluate(() => {
-          const s = window.cueai.state;
-          window.cueai.place(s.table.length * (s.behindHeadString ? 0.2 : 0.45), s.table.width * 0.5);
+          const s = window.pocket.state;
+          window.pocket.place(s.table.length * (s.behindHeadString ? 0.2 : 0.45), s.table.width * 0.5);
         });
       }
       const aimed =
         (await page.evaluate(AIM_AT_BEST_POT)) || (await page.evaluate(AIM_AT_ANY_LEGAL));
       if (!aimed) break;
-      await page.evaluate(() => window.cueai.shoot());
+      await page.evaluate(() => window.pocket.shoot());
       await settle(page);
       if (frames && frames.elapsed() > seconds) break;
     }
@@ -354,9 +360,9 @@ async function main() {
 
     // Line up a shot for the stills, then hold it.
     await page.evaluate(() => {
-      if (window.cueai.mode === "placing") {
-        const s = window.cueai.state;
-        window.cueai.place(s.table.length * 0.45, s.table.width * 0.5);
+      if (window.pocket.mode === "placing") {
+        const s = window.pocket.state;
+        window.pocket.place(s.table.length * 0.45, s.table.width * 0.5);
       }
     });
     await page.evaluate(AIM_AT_BEST_POT);
@@ -397,7 +403,7 @@ async function startScreencast(page) {
   await page.evaluate(() => {
     window.__modeMarks = [];
     window.__modeTimer = setInterval(() => {
-      window.__modeMarks.push([performance.timeOrigin + performance.now(), window.cueai.mode]);
+      window.__modeMarks.push([performance.timeOrigin + performance.now(), window.pocket.mode]);
     }, 60);
   });
   await client.send("Page.startScreencast", {

@@ -81,7 +81,7 @@ async function main() {
       throw new Error(`page returned ${response ? response.status() : "no response"}`);
     }
 
-    await page.waitForFunction(() => window.cueai !== undefined, { timeout: 10000 });
+    await page.waitForFunction(() => window.pocket !== undefined, { timeout: 10000 });
 
     // The canvas must actually have been painted, not merely created.
     const painted = await page.evaluate(() => {
@@ -102,8 +102,25 @@ async function main() {
     }
 
     console.log(`page loaded and painted (${painted.width}x${painted.height} device pixels)`);
+
+    // The README and the page nav send people to #play expecting to land on the
+    // table. That is one attribute away from silently scrolling nowhere.
+    const anchors = await page.evaluate(() => {
+      const local = [...document.querySelectorAll("a[href^='#']")].map((a) => a.getAttribute("href"));
+      return {
+        broken: local.filter((href) => !document.querySelector(href)),
+        playIsTheTable: document.getElementById("play")?.contains(document.getElementById("table")),
+      };
+    });
+    if (anchors.broken.length) {
+      throw new Error(`links to nothing: ${anchors.broken.join(", ")}`);
+    }
+    if (!anchors.playIsTheTable) {
+      throw new Error("#play does not contain the table, so the play link lands somewhere else");
+    }
+    console.log("every in-page link resolves, and #play is the table");
     for (let game = 0; game < games; game++) {
-      if (game > 0) await page.evaluate(() => window.cueai.newGame());
+      if (game > 0) await page.evaluate(() => window.pocket.newGame());
       const result = await playGame(page, shotLimit, verbose);
       console.log(
         `game ${game + 1}: ${result.shots} shots (${result.youShots} yours, ` +
@@ -135,13 +152,13 @@ async function playGame(page, shotLimit, verbose = false) {
   let turns = 0;
 
   for (; turns < shotLimit; turns++) {
-    const mode = await page.evaluate(() => window.cueai.mode);
+    const mode = await page.evaluate(() => window.pocket.mode);
     if (mode === "over") break;
 
     if (mode === "placing") {
       await page.evaluate(() => {
-        const s = window.cueai.state;
-        window.cueai.place(s.table.length * (s.behindHeadString ? 0.18 : 0.5), s.table.width * 0.5);
+        const s = window.pocket.state;
+        window.pocket.place(s.table.length * (s.behindHeadString ? 0.18 : 0.5), s.table.width * 0.5);
       });
       continue;
     }
@@ -151,7 +168,7 @@ async function playGame(page, shotLimit, verbose = false) {
       // eight is only chosen once the group is genuinely cleared, so a random
       // walk does not end every game by potting it early.
       await page.evaluate(() => {
-        const s = window.cueai.state;
+        const s = window.pocket.state;
         const cue = s.balls.find((b) => b.number === 0);
         const suit = (n) => (n === 8 ? "eight" : n <= 7 ? "solid" : "stripe");
         const mine = s.groups.you;
@@ -162,9 +179,9 @@ async function playGame(page, shotLimit, verbose = false) {
         if (targets.length === 0) targets = onTable.filter((b) => b.number === 8);
         if (targets.length === 0) targets = onTable;
         const t = targets[Math.floor(Math.random() * targets.length)];
-        window.cueai.aim(Math.atan2(t.y - cue.y, t.x - cue.x));
-        window.cueai.setPower(0.3 + Math.random() * 0.35);
-        window.cueai.shoot();
+        window.pocket.aim(Math.atan2(t.y - cue.y, t.x - cue.x));
+        window.pocket.setPower(0.3 + Math.random() * 0.35);
+        window.pocket.shoot();
       });
       await settle(page);
       continue;
@@ -181,9 +198,9 @@ async function playGame(page, shotLimit, verbose = false) {
   // The page records every resolved shot, which is the only reliable way to
   // see the bot's turns: they begin and end inside a single wait.
   const final = await page.evaluate(() => ({
-    phase: window.cueai.state.phase,
-    winner: window.cueai.state.winner,
-    history: window.cueai.history,
+    phase: window.pocket.state.phase,
+    winner: window.pocket.state.winner,
+    history: window.pocket.history,
   }));
 
   const history = final.history;
@@ -213,19 +230,19 @@ async function playGame(page, shotLimit, verbose = false) {
 /** Wait until the table is at rest and the page is ready for input again. */
 async function settle(page) {
   try {
-    await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.cueai.mode), {
+    await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.pocket.mode), {
       timeout: 60000,
       polling: 120,
     });
   } catch {
     // A stuck turn is the failure this test exists to catch, so say what stuck.
     const snapshot = await page.evaluate(() => {
-      const s = window.cueai.state;
+      const s = window.pocket.state;
       const moving = s.balls
         .filter((b) => !b.pocketed && Math.hypot(b.vx, b.vy) > 1e-4)
         .map((b) => `${b.number}@${Math.hypot(b.vx, b.vy).toFixed(4)}m/s`);
       return {
-        mode: window.cueai.mode,
+        mode: window.pocket.mode,
         turn: s.turn,
         phase: s.phase,
         ballInHand: s.ballInHand,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from cueai.physics.ball import Ball
-from cueai.physics.constants import TableParams
+from pocket.physics.ball import Ball
+from pocket.physics.constants import TableParams
 
 # Two balls count as touching once their surfaces are inside this band.
 #

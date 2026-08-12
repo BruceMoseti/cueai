@@ -1,5 +1,8 @@
 # Design
 
+▶ [Play the game](https://brucemoseti.github.io/cueai/#play) — the fourth tier
+described below, running in the browser.
+
 ## The problem this solves
 
 Simulating a billiards shot accurately is slow. Sixteen bodies, each in one of
@@ -33,13 +36,13 @@ shot parameters (speed, angle, tip offset, cue position, cloth μ, cushion e)
 
 ## Three tiers, on purpose
 
-**Tier 1: the numerical simulator** (`cueai.physics.simulator`). Explicit Euler
+**Tier 1: the numerical simulator** (`pocket.physics.simulator`). Explicit Euler
 integration at 1 ms, four-state cloth dynamics, frictional ball-ball impulses
 with spin transfer, cushion rebound, pocket capture. This is the definition of
 truth for everything else, and it is validated against closed-form results in
 [VALIDATION.md](VALIDATION.md).
 
-**Tier 2: the closed-form solver** (`cueai.physics.analytic`). No integration at
+**Tier 2: the closed-form solver** (`pocket.physics.analytic`). No integration at
 all. The observation that makes this possible: while a ball slides, the slip
 velocity `u` decays along a *fixed direction*, so the friction force is constant
 and the path over that phase is exactly a parabola of known duration
@@ -51,7 +54,7 @@ that detail right matters: a plain mirror-reflection approximation, which assume
 the ball leaves the rail rolling, disagreed with the simulator by about a metre,
 while this solver lands within 114 mm on direct shots and 225 mm across one rail.
 
-**Tier 3: the learned residual** (`cueai.ml`). A small MLP predicts the vector
+**Tier 3: the learned residual** (`pocket.ml`). A small MLP predicts the vector
 from the closed-form endpoint to the simulated endpoint. Its head is initialised
 to zero, so training starts from "trust the physics exactly" and moves away only
 where the data insists.

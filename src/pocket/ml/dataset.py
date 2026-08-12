@@ -25,9 +25,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from cueai.physics.analytic import predict_endpoint
-from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.simulator import FEATURE_NAMES, Simulator, shot_feature_vector
+from pocket.physics.analytic import predict_endpoint
+from pocket.physics.constants import ShotParams, TableParams
+from pocket.physics.simulator import FEATURE_NAMES, Simulator, shot_feature_vector
 
 TARGET_NAMES = [
     "cue_end_x",
