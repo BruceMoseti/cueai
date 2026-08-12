@@ -1,19 +1,36 @@
-"""Inference helpers: physics + ONNX / Torch residual fusion."""
+"""
+Inference: the closed-form baseline, the learned residual, and the simulator.
+
+Two prediction paths are exposed deliberately, because they trade accuracy for
+latency by four orders of magnitude:
+
+``predict_fast``
+    Closed-form solution plus the CueNet residual. Sub-millisecond, endpoints
+    only, suitable for search or for a real-time aiming aid.
+``predict``
+    Full numerical simulation for the whole rack, which is what the desktop UI
+    animates, alongside the fast prediction and the gap between them.
+"""
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import numpy as np
 import torch
 
+from cueai.ml.features import FEATURE_NAMES, build_features
 from cueai.ml.model import CueNet
+from cueai.physics.analytic import predict_endpoint
 from cueai.physics.ball import Ball
 from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.simulator import FEATURE_NAMES, Simulator, shot_feature_vector
+from cueai.physics.simulator import Simulator
 
 
 class TrajectoryPredictor:
+    """Loads whichever CueNet artefacts are present and serves predictions."""
+
     def __init__(self, model_dir: str | Path = "models"):
         self.model_dir = Path(model_dir)
         self.sim = Simulator(dt=0.001, max_time=14.0, collision_passes=20)
@@ -23,41 +40,106 @@ class TrajectoryPredictor:
         self.ort_session = None
         self._load()
 
+    # ------------------------------------------------------------------ loading
+
     def _load(self) -> None:
-        ckpt = self.model_dir / "cuenet.pt"
-        onnx = self.model_dir / "cuenet.onnx"
-        if ckpt.exists():
-            data = torch.load(ckpt, map_location="cpu", weights_only=False)
-            self.net = CueNet(in_dim=int(data["in_dim"]))
+        checkpoint = self.model_dir / "cuenet.pt"
+        onnx_path = self.model_dir / "cuenet.onnx"
+        if checkpoint.exists():
+            data = torch.load(checkpoint, map_location="cpu", weights_only=False)
+            self.net = CueNet(in_dim=int(data["in_dim"]), hidden=int(data.get("hidden", 256)))
             self.net.load_state_dict(data["state_dict"])
             self.net.eval()
             self.mean = np.asarray(data["scaler_mean"], dtype=np.float32)
             self.scale = np.asarray(data["scaler_scale"], dtype=np.float32)
-        if onnx.exists():
+        if onnx_path.exists():
             try:
                 import onnxruntime as ort
 
                 self.ort_session = ort.InferenceSession(
-                    str(onnx), providers=["CPUExecutionProvider"]
+                    str(onnx_path), providers=["CPUExecutionProvider"]
                 )
-            except Exception:
+            except Exception:  # pragma: no cover - optional runtime
                 self.ort_session = None
 
-    def _scale(self, x: np.ndarray) -> np.ndarray:
-        if self.mean is None or self.scale is None:
-            return x.astype(np.float32)
-        return ((x - self.mean) / np.clip(self.scale, 1e-8, None)).astype(np.float32)
+    @property
+    def ready(self) -> bool:
+        """True when a trained residual model is available."""
+        return self.net is not None or self.ort_session is not None
 
-    def _residual(self, x: np.ndarray) -> np.ndarray:
-        xs = self._scale(x)[None, :]
+    @property
+    def backend(self) -> str:
         if self.ort_session is not None:
-            out = self.ort_session.run(None, {"features": xs})[0]
-            return np.asarray(out[0], dtype=np.float64)
+            return "onnx"
+        return "torch" if self.net is not None else "none"
+
+    # --------------------------------------------------------------- prediction
+
+    def feature_vector(
+        self,
+        shot: ShotParams,
+        cue_pos: tuple[float, float] | np.ndarray,
+        obj_pos: tuple[float, float] | np.ndarray | None,
+        table: TableParams,
+    ) -> np.ndarray:
+        """Identical construction to training; see :mod:`cueai.ml.features`."""
+        return build_features(
+            shot, cue_pos, obj_pos, table, radius=self.sim.ball_params.radius
+        )
+
+    def _standardise(self, features: np.ndarray) -> np.ndarray:
+        if self.mean is None or self.scale is None:
+            return features.astype(np.float32)
+        return ((features - self.mean) / np.clip(self.scale, 1e-8, None)).astype(np.float32)
+
+    def residual_batch(self, features: np.ndarray) -> np.ndarray:
+        """Endpoint corrections for a batch of raw feature rows, shape (N, 4)."""
+        standardised = self._standardise(np.atleast_2d(features))
+        if self.ort_session is not None:
+            return np.asarray(
+                self.ort_session.run(None, {"features": standardised})[0], dtype=np.float64
+            )
         if self.net is not None:
             with torch.no_grad():
-                out = self.net(torch.from_numpy(xs)).numpy()[0]
-            return out.astype(np.float64)
-        return np.zeros(4, dtype=np.float64)
+                return self.net(torch.from_numpy(standardised)).numpy().astype(np.float64)
+        return np.zeros((len(standardised), 4), dtype=np.float64)
+
+    def predict_fast(
+        self,
+        shot: ShotParams,
+        cue_pos: tuple[float, float],
+        obj_pos: tuple[float, float] | None = None,
+        table: TableParams | None = None,
+        use_ml: bool = True,
+    ) -> dict:
+        """Closed-form endpoints plus the learned residual. No integration."""
+        table = table or self.sim.table
+        baseline_cue = predict_endpoint(shot, cue_pos, table, radius=self.sim.ball_params.radius)
+        baseline_obj = np.asarray(obj_pos, dtype=np.float64) if obj_pos is not None else None
+        baseline = np.concatenate(
+            [baseline_cue, baseline_obj if baseline_obj is not None else np.zeros(2)]
+        )
+
+        features = self.feature_vector(shot, cue_pos, obj_pos, table)
+        residual = (
+            self.residual_batch(features)[0] if (use_ml and self.ready) else np.zeros(4)
+        )
+        corrected = baseline + residual
+        # With no object ball there is nothing for the object channel to refer to,
+        # so it is reported as absent rather than as a position near the origin.
+        has_object = baseline_obj is not None
+        return {
+            "baseline_endpoints": {
+                "cue": baseline[:2].tolist(),
+                "object": baseline[2:].tolist() if has_object else None,
+            },
+            "residual": residual.tolist(),
+            "endpoints": {
+                "cue": corrected[:2].tolist(),
+                "object": corrected[2:].tolist() if has_object else None,
+            },
+            "backend": self.backend if use_ml else "closed_form",
+        }
 
     def predict(
         self,
@@ -70,8 +152,16 @@ class TrajectoryPredictor:
         seed: int | None = 7,
         balls: list[Ball] | None = None,
     ) -> dict:
+        """
+        Full simulation plus the fast prediction, so the two can be compared.
+
+        The returned ``agreement`` block is what the UI and the API surface: how
+        far the sub-millisecond estimate lands from the simulated outcome.
+        """
         if table is not None:
             self.sim.table = table
+
+        sim_start = time.perf_counter()
         result = self.sim.simulate_shot(
             shot,
             cue_pos=cue_pos,
@@ -80,39 +170,42 @@ class TrajectoryPredictor:
             seed=seed,
             balls=balls,
         )
-        cue_p = np.array(cue_pos, dtype=np.float64)
-        # Use 8-ball as reference object for ML residual (legacy head)
-        eight = result.endpoints.get(8, result.endpoints.get(1, np.zeros(2)))
-        obj_p = np.asarray(eight, dtype=np.float64)
-        feats = shot_feature_vector(shot, cue_p, obj_p, self.sim.table)
-        phys = np.array(
-            [
-                result.endpoints.get(0, np.zeros(2))[0],
-                result.endpoints.get(0, np.zeros(2))[1],
-                float(obj_p[0]),
-                float(obj_p[1]),
-            ]
+        sim_ms = (time.perf_counter() - sim_start) * 1000
+
+        # With a full rack the 8-ball stands in for "the object ball" so that the
+        # single-object-ball model trained on two-ball shots still has a referent.
+        reference = result.endpoints.get(8, result.endpoints.get(1, np.zeros(2)))
+        reference_pos = (float(reference[0]), float(reference[1]))
+
+        fast_start = time.perf_counter()
+        fast = self.predict_fast(
+            shot, cue_pos, obj_pos=obj_pos or reference_pos, table=self.sim.table, use_ml=use_ml
         )
-        residual = self._residual(feats) if use_ml else np.zeros(4)
-        corrected = phys + residual
+        fast_ms = (time.perf_counter() - fast_start) * 1000
+
+        simulated_cue = np.asarray(result.endpoints.get(0, np.zeros(2)), dtype=np.float64)
+        cue_gap = float(np.linalg.norm(simulated_cue - np.asarray(fast["endpoints"]["cue"])))
+
         return {
-            "features": {k: float(v) for k, v in zip(FEATURE_NAMES, feats)},
-            "physics_endpoints": {
-                "cue": phys[:2].tolist(),
-                "object": phys[2:].tolist(),
+            "features": dict(
+                zip(
+                    FEATURE_NAMES,
+                    self.feature_vector(shot, cue_pos, reference_pos, self.sim.table),
+                )
+            ),
+            "simulated_endpoints": {
+                "cue": simulated_cue.tolist(),
+                "object": list(reference_pos),
             },
-            "ml_residual": residual.tolist(),
-            "fused_endpoints": {
-                "cue": corrected[:2].tolist(),
-                "object": corrected[2:].tolist(),
-            },
+            "fast_prediction": fast,
+            "agreement": {"cue_gap_m": cue_gap},
+            "timing_ms": {"simulator": sim_ms, "fast": fast_ms},
             "endpoints": {str(k): v.tolist() for k, v in result.endpoints.items()},
-            "trajectory": {
-                str(k): v.tolist() for k, v in result.trajectories.items()
-            },
+            "trajectory": {str(k): v.tolist() for k, v in result.trajectories.items()},
             "ball_meta": {str(k): v for k, v in result.ball_meta.items()},
             "pocketed": {str(k): bool(v) for k, v in result.pocketed.items()},
             "collisions": result.collision_events,
+            "cushions": result.cushion_events,
             "times": result.times.tolist(),
-            "ml_loaded": self.net is not None or self.ort_session is not None,
+            "ml_loaded": self.ready,
         }

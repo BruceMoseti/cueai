@@ -7,6 +7,19 @@ import numpy as np
 from cueai.physics.ball import Ball
 from cueai.physics.constants import TableParams
 
+# Two balls count as touching once their surfaces are inside this band.
+#
+# The value is a constant rather than a literal because it has a correctness
+# requirement, not just a tuning one: it must sit far above the floating-point
+# noise in a position (~1e-16 m) and far below anything physical, and it must
+# not coincide with the gap balls are racked at. It used to be 1e-4, exactly
+# the racking clearance, and the consequence was that only sixteen of a rack's
+# thirty contacts registered — which sixteen being decided by whether hypot()
+# happened to round up or down. A break then propagated through a contact graph
+# with holes in it, so balls in the middle of the rack came out of a full-power
+# break having never moved.
+CONTACT_BAND = 1e-5
+
 
 def ball_ball_friction(v_rel: float, table: TableParams) -> float:
     """
@@ -25,24 +38,31 @@ def resolve_ball_ball(a: Ball, b: Ball, table: TableParams) -> tuple[Ball, Ball]
 
     Includes relative-velocity-dependent friction and contact-point ω coupling.
     """
-    a, b = a.copy(), b.copy()
     if a.pocketed or b.pocketed:
         return a, b
 
     delta = b.pos - a.pos
-    dist = float(np.linalg.norm(delta))
+    dist = float(np.hypot(delta[0], delta[1]))
     min_dist = a.R + b.R
-    if dist < 1e-12:
-        return a, b
-    if dist > min_dist + 2e-4:
+    if dist < 1e-12 or dist > min_dist + CONTACT_BAND:
         return a, b
 
     n = delta / dist
     overlap = min_dist - dist
+    # Angular velocity contributes nothing along n, because ω × (R n) ⊥ n, so the
+    # approach speed can be tested before doing any of the impulse work. Balls
+    # resting in contact — most pairs in a packed rack, every step — stop here.
+    v_n = float((a.vel - b.vel) @ n)
+    if v_n <= 1e-6 and overlap <= 0:
+        return a, b
+
+    a, b = a.copy(), b.copy()
     if overlap > 0:
         # Mass-proportional separation (equal mass → half/half)
         a.pos = a.pos - 0.5 * overlap * n
         b.pos = b.pos + 0.5 * overlap * n
+    if v_n <= 1e-6:
+        return a, b  # separating or resting: positional correction only
 
     ra = a.R * np.array([n[0], n[1], 0.0])
     rb = -b.R * np.array([n[0], n[1], 0.0])
@@ -52,11 +72,8 @@ def resolve_ball_ball(a: Ball, b: Ball, table: TableParams) -> tuple[Ball, Ball]
     vb3 = np.array([b.vel[0], b.vel[1], 0.0])
     v_rel = (va3 - vb3) + np.cross(wa, ra) - np.cross(wb, rb)
 
-    v_n = float(np.dot(v_rel[:2], n))
-    # n points a→b; approaching when (va−vb)·n > 0
-    if v_n <= 1e-6:
-        return a, b  # separating or resting
-
+    # v_n was already established above from the linear velocities; the spin terms
+    # in v_rel are tangential and only matter for the friction impulse below.
     e = table.e_ball
     # Slightly softer at high speed (energy loss grows)
     speed_n = abs(v_n)
@@ -183,34 +200,57 @@ def check_pocket(ball: Ball, table: TableParams) -> Ball:
 
 
 def resolve_all_ball_collisions(
-    balls: list[Ball], table: TableParams, passes: int = 8
+    balls: list[Ball], table: TableParams, passes: int = 24
 ) -> list[Ball]:
     """
     Multi-pass pairwise resolution so cluster breaks / simultaneous contacts
     propagate (critical for a packed rack).
+
+    The count is a safety cap, not the usual cost: the loop exits as soon as a
+    pass changes nothing, which for a table that is merely resting is the first
+    one. It has to exceed the depth of the contact chain the impulse travels
+    along, five rows for a full rack, and `web/js/physics.js` must use the same
+    number or the two implementations diverge on exactly the shots that matter.
     """
     balls = [b.copy() for b in balls]
     n = len(balls)
     for _ in range(passes):
         any_hit = False
+        # Candidate search is vectorised: with 16 balls this runs every time step,
+        # so the pairwise distances are one numpy call rather than 120 Python ones.
+        active = [i for i in range(n) if not balls[i].pocketed]
+        if len(active) < 2:
+            break
+        positions = np.array([balls[i].pos for i in active])
+        radii = np.array([balls[i].R for i in active])
+        gaps = (
+            np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=2)
+            - radii[:, None]
+            - radii[None, :]
+        )
+        rows, cols = np.nonzero(np.triu(gaps <= CONTACT_BAND, k=1))
         # Process deepest overlaps first for stability
-        pairs: list[tuple[float, int, int]] = []
-        for i in range(n):
-            if balls[i].pocketed:
-                continue
-            for j in range(i + 1, n):
-                if balls[j].pocketed:
-                    continue
-                d = float(np.linalg.norm(balls[i].pos - balls[j].pos))
-                min_d = balls[i].R + balls[j].R
-                if d <= min_d + 1e-4:
-                    pairs.append((d - min_d, i, j))
-        pairs.sort()  # most overlapped first
+        pairs = sorted(
+            (float(gaps[r, c]), active[r], active[c]) for r, c in zip(rows, cols)
+        )
         for _, i, j in pairs:
             bi, bj = resolve_ball_ball(balls[i], balls[j], table)
-            if not np.allclose(bi.vel, balls[i].vel) or not np.allclose(bj.vel, balls[j].vel):
+            # Exact comparison, not ``allclose``: its 1e-8 absolute tolerance
+            # would end the sweep a pass early on nanometre-scale corrections,
+            # and since the JavaScript port reports what it did rather than
+            # inferring it, a tolerance here is a divergence between the two.
+            if (
+                not np.array_equal(bi.vel, balls[i].vel)
+                or not np.array_equal(bj.vel, balls[j].vel)
+                or not np.array_equal(bi.pos, balls[i].pos)
+                or not np.array_equal(bj.pos, balls[j].pos)
+            ):
                 any_hit = True
             balls[i], balls[j] = bi, bj
-        if not any_hit and not pairs:
+        # A pass that changed nothing leaves the next one the same problem, so
+        # this is convergence rather than a budget. It matters now that a
+        # racked table reports thirty resting contacts every step instead of
+        # sixteen: without it every step below would pay for all the passes.
+        if not any_hit:
             break
     return balls

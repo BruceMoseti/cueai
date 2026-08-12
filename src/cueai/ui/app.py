@@ -7,20 +7,20 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PyQt6.QtCore import QPointF, Qt, QTimer, QRectF
-from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
-    QCheckBox,
+    QSlider,
     QVBoxLayout,
     QWidget,
-    QSlider,
 )
 
 from cueai.ml.infer import TrajectoryPredictor
@@ -339,7 +339,7 @@ class MainWindow(QMainWindow):
         self.noise.setRange(0, 0.08)
         self.noise.setValue(0.025)
         self.noise.setSingleStep(0.005)
-        self.use_ml = QCheckBox("ML residual fusion")
+        self.use_ml = QCheckBox("Compare fast prediction")
         self.use_ml.setChecked(True)
         self.show_paths = QCheckBox("Show trails")
         self.show_paths.setChecked(True)
@@ -408,9 +408,7 @@ class MainWindow(QMainWindow):
             mu_slide=self.mu.value(),
             friction_noise_amp=self.noise.value(),
         )
-        # Continue from current table state (multi-shot play)
-        live = [b.copy() for b in self.canvas.balls if not b.pocketed or b.number == 0]
-        # keep pocketed markers
+        # Continue from the current table state, pocketed markers included
         all_balls = [b.copy() for b in self.canvas.balls]
         result = self.predictor.predict(
             shot,
@@ -432,12 +430,20 @@ class MainWindow(QMainWindow):
 
         sunk = [k for k, v in result["pocketed"].items() if v and k != "0"]
         cue_scratch = bool(result["pocketed"].get("0"))
-        ml = "ON" if result["ml_loaded"] and self.use_ml.isChecked() else "OFF"
-        self.status.setText(
-            f"ML {ml} · collisions≈{result.get('collisions', 0)} · "
+        timing = result.get("timing_ms", {})
+        gap = result.get("agreement", {}).get("cue_gap_m")
+        summary = (
+            f"simulated in {timing.get('simulator', 0.0) / 1000:.1f} s · "
+            f"collisions≈{result.get('collisions', 0)} · cushions≈{result.get('cushions', 0)} · "
             f"pocketed {len(sunk)} {sunk[:6]}{'…' if len(sunk) > 6 else ''}"
             + (" · SCRATCH" if cue_scratch else "")
         )
+        if self.use_ml.isChecked() and gap is not None:
+            summary += (
+                f"\nfast prediction took {timing.get('fast', 0.0):.2f} ms and landed "
+                f"{gap * 1000:.0f} mm from the simulated cue ball"
+            )
+        self.status.setText(summary)
 
 
 def main() -> None:

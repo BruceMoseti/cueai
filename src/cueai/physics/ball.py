@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cueai.physics.constants import G, BallParams, TableParams
+from cueai.physics.constants import BallParams, G, TableParams
 
 if TYPE_CHECKING:
     from cueai.physics.rack import BallIdentity
@@ -31,9 +32,9 @@ class Ball:
     params: BallParams = field(default_factory=BallParams)
     pocketed: bool = False
     number: int = 0
-    identity: Optional["BallIdentity"] = None
+    identity: BallIdentity | None = None
 
-    def copy(self) -> "Ball":
+    def copy(self) -> Ball:
         return Ball(
             id=self.id,
             pos=self.pos.copy(),
@@ -58,11 +59,16 @@ class Ball:
         return self.params.inertia
 
     def slip_velocity(self) -> np.ndarray:
-        """Velocity of cloth contact point: u = v + ω × (-Rẑ)."""
+        """
+        Velocity of the cloth contact point: u = v + ω × (-Rẑ).
+
+        Expanding the cross product gives u = (vₓ - Rω_y, v_y + Rω_x), so pure
+        rolling (u = 0) corresponds to ω_y = vₓ/R and ω_x = -v_y/R.
+        """
         return np.array(
             [
-                self.vel[0] + self.omega[1] * self.R,
-                self.vel[1] - self.omega[0] * self.R,
+                self.vel[0] - self.omega[1] * self.R,
+                self.vel[1] + self.omega[0] * self.R,
             ],
             dtype=np.float64,
         )
@@ -77,7 +83,9 @@ class Ball:
         u_mag = float(np.linalg.norm(u))
         v_mag = self.speed()
         wz = abs(self.omega[2])
-        slip_eps = max(0.05, 0.05 * max(v_mag, 0.1))
+        # Tolerance must exceed the per-step slip decrement (≈3.5 μ g dt) to avoid
+        # chattering between SLIDING and ROLLING near the transition.
+        slip_eps = max(0.01, 0.01 * v_mag)
         if v_mag < eps and u_mag < eps and wz < eps:
             return MotionState.STATIONARY
         if u_mag < slip_eps and v_mag >= eps:
@@ -85,6 +93,22 @@ class Ball:
         if v_mag < eps and wz >= eps:
             return MotionState.SPINNING
         return MotionState.SLIDING
+
+
+def decay_spin(omega_z: float, table: TableParams, radius: float, dt: float) -> float:
+    """
+    Spin-down about the vertical axis, clamped at zero.
+
+    The decrement per step is constant, so subtracting it unconditionally steps
+    straight past zero and flips the sign; the ball then chatters between two
+    small values and never reaches rest, and `Simulator.run` gives up at
+    `max_time` instead of stopping when the table is still. Clamping is not a
+    tolerance hack: friction removes spin, it cannot reverse it.
+    """
+    step = 2.5 * table.mu_spin * G / radius * dt
+    if abs(omega_z) <= step:
+        return 0.0
+    return omega_z - math.copysign(step, omega_z)
 
 
 def local_mu_slide(table: TableParams, pos: np.ndarray) -> float:
@@ -108,7 +132,6 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
     R, m, I = b.R, b.m, b.I
     mu_s = local_mu_slide(table, b.pos)
     mu_r = table.mu_roll
-    mu_sp = table.mu_spin
 
     if state is MotionState.STATIONARY:
         b.vel[:] = 0
@@ -116,11 +139,7 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         return b
 
     if state is MotionState.SPINNING:
-        decay = 2.5 * mu_sp * G / R
-        sgn = np.sign(b.omega[2]) if b.omega[2] != 0 else 0.0
-        b.omega[2] -= decay * sgn * dt
-        if abs(b.omega[2]) < 1e-4:
-            b.omega[2] = 0.0
+        b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
         return b
 
     if state is MotionState.SLIDING:
@@ -129,14 +148,14 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         if u_mag < 1e-9:
             return b
         u_hat = u / u_mag
-        # Curving force: slip has a component from sidespin → path curves
+        # Friction opposes the contact-point slip, not the ball centre velocity
         a = -mu_s * G * u_hat
-        alpha = np.array([-R * m * a[1] / I, R * m * a[0] / I, 0.0])
-        if abs(b.omega[2]) > 1e-6:
-            alpha[2] = -np.sign(b.omega[2]) * 2.5 * mu_sp * G / R
+        # τ = (-Rẑ) × F  ⇒  α = (R m a_y / I, -R m a_x / I, 0)
+        alpha = np.array([R * m * a[1] / I, -R * m * a[0] / I, 0.0])
 
         b.vel = b.vel + a * dt
         b.omega = b.omega + alpha * dt
+        b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
         u2 = b.slip_velocity()
         if float(np.linalg.norm(u2)) < max(1e-3, 0.01 * b.speed()):
             b.omega[0] = -b.vel[1] / R
@@ -150,12 +169,9 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         b.omega[:2] = 0
         return b
     v_hat = b.vel / v_mag
-    # Mild curve while rolling if residual ωz (english hold)
+    # Rolling resistance only. Vertical-axis spin exerts no lateral force on a
+    # rolling rigid sphere; it acts through cushion and ball-ball throw instead.
     a = -mu_r * G * v_hat
-    if abs(b.omega[2]) > 0.5:
-        # small lateral force from residual spin-on-cloth coupling
-        lateral = np.array([-v_hat[1], v_hat[0]]) * (0.002 * b.omega[2])
-        a = a + lateral
     b.vel = b.vel + a * dt
     if b.speed() < 2e-2:
         b.vel[:] = 0
@@ -163,7 +179,6 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         return b
     b.omega[0] = -b.vel[1] / R
     b.omega[1] = b.vel[0] / R
-    if abs(b.omega[2]) > 1e-6:
-        b.omega[2] -= np.sign(b.omega[2]) * 2.5 * mu_sp * G / R * dt
+    b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
     b.pos = b.pos + b.vel * dt
     return b

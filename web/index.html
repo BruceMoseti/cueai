@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CueAI — play the simulator</title>
+    <meta
+      name="description"
+      content="Eight-ball against a search-based bot, running the same validated rigid-body physics as the CueAI Python reference, in the browser."
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%2312594a'/><circle cx='16' cy='16' r='6' fill='%23f5f5f0'/></svg>"
+    />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="masthead">
+        <h1>Cue<span>AI</span></h1>
+        <div class="tag">
+          Eight-ball against a search-based opponent, on the same rigid-body physics the
+          Python reference is validated against.
+        </div>
+        <nav>
+          <a href="https://github.com/BruceMoseti/cueai">Repository</a>
+          <a href="#how">How it works</a>
+        </nav>
+      </header>
+
+      <div class="stage">
+        <div class="table-column">
+          <div class="table-shell">
+            <canvas id="table"></canvas>
+            <div class="banner" id="banner">
+              <h2 id="banner-title">Game over</h2>
+              <p id="banner-text"></p>
+              <button class="primary" id="banner-button">New game</button>
+            </div>
+          </div>
+
+          <div class="controls">
+            <div class="spin-widget">
+              <span class="caption">Tip offset</span>
+              <canvas id="spin" width="74" height="74" title="Click to move the cue tip off centre"></canvas>
+            </div>
+
+            <div class="power-block">
+              <label for="power">Power <span id="power-hint" style="text-transform: none; letter-spacing: 0">— move to aim, drag back from the cue ball to strike</span></label>
+              <div class="power-row">
+                <input id="power" type="range" min="0.06" max="1" step="0.01" value="0.42" />
+                <span class="readout" id="power-readout">3.1 m/s</span>
+              </div>
+              <div class="power-row" style="margin-top: 10px">
+                <span class="kbd">←</span><span class="kbd">→</span>
+                <span style="font-size: 11.5px; color: var(--ink-faint)">fine aim</span>
+                <span class="kbd">Shift</span>
+                <span style="font-size: 11.5px; color: var(--ink-faint)">slow aim</span>
+                <span class="kbd">Space</span>
+                <span style="font-size: 11.5px; color: var(--ink-faint)">shoot</span>
+              </div>
+            </div>
+
+            <div class="button-stack">
+              <button class="primary" id="shoot">Shoot</button>
+              <button id="newgame">New game</button>
+            </div>
+          </div>
+
+          <div class="shotlog">
+            <div class="shotlog-head">
+              <span>Shot log</span>
+              <span>what the rules engine ruled, and why</span>
+            </div>
+            <ol id="shotlog-list">
+              <li class="empty">Nothing yet. Place the cue ball behind the head string and break.</li>
+            </ol>
+          </div>
+        </div>
+
+        <aside>
+          <div class="panel">
+            <div class="turn-line">
+              <span class="dot" id="turn-dot"></span>
+              <span id="turn-label">Your break</span>
+            </div>
+            <div class="message" id="message">
+              Place the cue ball behind the head string and break.
+            </div>
+            <div class="groups">
+              <div class="group-card" id="card-you">
+                <div class="who">You</div>
+                <div class="what" id="group-you">open table</div>
+                <div class="ball-row" id="balls-you"></div>
+              </div>
+              <div class="group-card" id="card-bot">
+                <div class="who">Bot</div>
+                <div class="what" id="group-bot">open table</div>
+                <div class="ball-row" id="balls-bot"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Cue ball, live</h3>
+            <span class="state-chip stationary" id="state-chip">STATIONARY</span>
+            <div class="stat-grid" id="inspector-stats"></div>
+            <canvas id="trace"></canvas>
+            <div class="trace-legend" id="trace-legend"></div>
+          </div>
+
+          <div class="panel">
+            <h3>Opponent</h3>
+            <div class="setting-row">
+              <span>Strength</span>
+              <select id="difficulty">
+                <option value="relaxed">Relaxed</option>
+                <option value="club" selected>Club player</option>
+                <option value="sharp">Sharp</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Shot playback</span>
+              <select id="playback">
+                <option value="1">Real time</option>
+                <option value="1.8" selected>Brisk</option>
+                <option value="3">Quick</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Show aim lines</span>
+              <input type="checkbox" id="show-aim" checked />
+            </div>
+            <div class="setting-row">
+              <span>Mark legal targets</span>
+              <input type="checkbox" id="show-targets" checked />
+            </div>
+            <div class="progress"><div id="bot-progress"></div></div>
+            <div class="bot-line" id="bot-report">
+              The bot solves every pot in closed form, then simulates the ones worth
+              considering.
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="explainer" id="how">
+        <h2>What you are actually looking at</h2>
+        <p class="lede">
+          This is not a pool game with physics bolted on. It is a rigid-body simulator that
+          was written first, checked against closed-form mechanics, and then given a table
+          and an opponent so the model can be watched while it runs. Everything below is
+          measured by something in the repository, and the command that measures it is named.
+        </p>
+
+        <div class="cards">
+          <div class="card">
+            <h3>The cloth model has four regimes</h3>
+            <p>
+              A struck ball does not simply decelerate. While its contact point is slipping
+              against the cloth, friction acts opposite the <em>slip</em> velocity rather
+              than the ball's velocity, and the same force exerts a torque that spins the
+              ball up:
+            </p>
+            <code class="eq">u = v + ω × (−R ẑ),  a = −μ<sub>s</sub> g û,  α = (−R ẑ × F)/I</code>
+            <p>
+              Slip decays 3.5 times faster than the centre of mass slows, so the ball settles
+              into rolling at exactly <code>5/7</code> of its launch speed and only then
+              switches to the much smaller rolling resistance. Watch the
+              <b>Cue ball, live</b> panel during a shot: the yellow slip curve collapses to
+              zero and the green speed curve lands on the blue line. That line is a
+              prediction from the mechanics, not a fitted parameter.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>The physics is pinned to closed-form answers</h3>
+            <p>
+              Simulators are easy to make self-consistent and wrong. The test suite compares
+              the integrator against results derived independently on paper, not against its
+              own earlier output: the 5/7 rolling speed, the
+              <code>12v₀²/(49 μ<sub>s</sub> g)</code> sliding distance, spin decay, cushion
+              restitution, the draw/stun/follow ordering, exact momentum conservation and
+              strictly decreasing energy.
+            </p>
+            <p>
+              An earlier version of this repository failed all of that. The contact-point
+              slip and the friction torque had opposite handedness, so friction drove the
+              ball <em>away</em> from rolling: measured rolling speed was zero instead of
+              <code>5/7 v₀</code>, and stopping distance was four times short.
+            </p>
+            <div class="measure">
+              <div>
+                <div class="n" data-fact="physics-tests">32</div>
+                <div class="l">physics tests</div>
+              </div>
+              <div><div class="n">3 mm</div><div class="l">timestep convergence</div></div>
+              <div><div class="n">±0.5°</div><div class="l">aim tolerance, measured</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>The bug the tests could not see</h3>
+            <p>
+              Closed-form checks exercise one ball at a time, so a defect that only exists
+              between balls survives them. This one did. The solver counted two balls as
+              touching when the gap between their surfaces was under
+              <code>1e-4 m</code> — and the rack was built with a <code>1e-4 m</code>
+              clearance. All thirty contacts in the triangle sat exactly on the threshold,
+              and which side each fell on came down to whether <code>hypot</code> rounded up
+              or down. Sixteen registered. Fourteen did not.
+            </p>
+            <p>
+              A break propagated through a contact graph with holes in it: balls in the
+              middle of the rack came out of a full-power break having barely moved, and the
+              table opened up <em>less</em> the harder it was struck. It was found by
+              measuring break spread against cue speed and getting the sign wrong, not by a
+              test failing. What fixed it was giving the tolerance a name, using the same one
+              everywhere, and racking the balls actually touching so nothing sits on the
+              boundary. A test now asserts the property that caught it, because it is
+              exactly the kind nobody writes down: a harder break opens the table further.
+            </p>
+            <p>
+              Measuring that turned up something the fix does not solve, and which is worth
+              stating rather than hiding. A rack is resolved as a chain of about fifteen
+              pairwise collisions, and each one applies restitution, so the survival factor
+              compounds: only <b>48%</b> of the kinetic energy comes through a 10 m/s break,
+              where the real event is one stress wave that dissipates once. The break you
+              see below opens the table, but less than a real one would. It is the largest
+              known departure from reality here, and fixing it means treating a simultaneous
+              contact set as a single event rather than adjusting a coefficient.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>The browser runs the reference, not a lookalike</h3>
+            <p>
+              <code>web/js/physics.js</code> is a hand port of
+              <code>src/cueai/physics/</code>, and a port nobody measures is a rumour.
+              <code>scripts/export_parity_cases.py</code> runs
+              <span data-fact="parity-cases">35</span> shots through the Python simulator —
+              draw, follow, english off two rails, thin cuts, clusters, and full sixteen-ball
+              breaks — and records where every ball stopped.
+              <code>web/test/parity.mjs</code> replays them here and compares.
+            </p>
+            <p>
+              The largest disagreement across all of them is
+              <b data-fact="parity-worst">0.0012 mm</b> — a thousandth of a
+              millimetre, accumulated over seconds of a chaotic sixteen-ball break, and far
+              below the scale at which the two could be said to behave differently. It runs
+              in continuous integration, so they cannot quietly drift apart.
+            </p>
+            <p>
+              Twenty headless bot-against-bot games walk every branch of the rules, and
+              check on each of the roughly eight hundred thousand physics steps they take
+              that no two balls are ever sharing space and nothing is ever inside a cushion.
+              The worst overlap seen is <b>0.5 mm</b> on a 57 mm ball, a fifth of a pixel at
+              the size this table is drawn. They also assert that every break moves at
+              least ten of the fifteen — it moves twelve — because a break that clips the
+              apex leaves the rack standing and looks exactly like a limitation of the
+              physics rather than a badly aimed cue.
+            </p>
+            <div class="measure">
+              <div>
+                <div class="n" data-fact="parity-speedup">65×</div>
+                <div class="l">faster than the reference</div>
+              </div>
+              <div>
+                <div class="n" data-fact="parity-table-seconds">156 s</div>
+                <div class="l">of table time, both ways</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>The bot is a search, and that is the point</h3>
+            <p>
+              Aiming a pot needs no learned model: the ghost-ball construction is exact, and
+              a test asserts that aiming at it drops the ball while half a degree either
+              side misses. So the bot spends nothing on aiming. It enumerates every
+              ball-and-pocket pair in closed form, discards whatever is blocked or cut too
+              thin, and spends its whole budget <em>simulating</em> the survivors to see
+              what each one leaves behind.
+            </p>
+            <p>
+              That is the argument this repository makes about fast physics, running in
+              front of you: the value of a cheap simulation is the number of futures you can
+              afford to look at. The panel above reports how many candidates the bot
+              enumerated, how many it actually simulated, and how much table time that was.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>Where the learned model fits, and where it does not</h3>
+            <p>
+              The Python side also trains a surrogate that predicts resting positions
+              directly, at <b data-fact="surrogate-latency">0.60 ms</b> against
+              <b data-fact="sim-full-rack">4.6 s</b> for a full rack in the reference
+              simulator. It cuts mean endpoint error from
+              <span data-fact="analytic-error">494 mm</span> to
+              <span data-fact="surrogate-error">376 mm</span> against the closed-form
+              baseline it corrects, over <span data-fact="samples">20,000</span> simulated
+              shots.
+            </p>
+            <p>
+              The bot above does not use it, and the reason is the more useful result. Ported
+              to the browser the same physics runs
+              <span data-fact="parity-speedup">65×</span> faster, which is enough to simulate
+              the shots worth considering exactly. A surrogate is worth its error when you
+              need to screen far more candidates than you can afford to simulate; inside one
+              turn, you do not. Reported against interest: once a ball-ball collision has to
+              be modelled, it loses to plain gradient boosting
+              (<span data-fact="contact-cuenet">696 mm</span> against
+              <span data-fact="contact-gbm">610 mm</span>). Every number here is rewritten by
+              the training run.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>Reproducing all of it</h3>
+            <p>Nothing here is a screenshot of a number that was true once.</p>
+            <code class="eq">make check      # ruff, mypy, the whole test suite
+make parity     # export shots from Python, replay them in Node
+make selfplay   # 20 headless games, every rule branch
+make browser    # load this page in Chrome and play a game
+make all        # dataset → training → benchmarks → figures</code>
+            <p>
+              The figures on this page are written by
+              <code>scripts/site_facts.py</code> from those runs rather than typed in, and
+              continuous integration fails if they drift. The game itself is dependency-free
+              ES modules: no bundler, no framework, no build step.
+              <code>python3 -m http.server</code> in <code>web/</code> is enough to run
+              everything you see.
+            </p>
+          </div>
+        </div>
+
+        <footer>
+          Physics, rules, rendering and the opponent are in
+          <code>web/js/</code>; the reference simulator, the validation suite and the
+          learned surrogate are in <code>src/cueai/</code>. Fouls follow standard eight-ball:
+          hit your own group first, drive a ball to a rail, and the eight goes last.
+        </footer>
+      </section>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

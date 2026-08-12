@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from cueai.physics.ball import Ball, integrate_ball, MotionState
+from cueai.physics.ball import Ball, MotionState, integrate_ball
 from cueai.physics.constants import BallParams, ShotParams, TableParams
 from cueai.physics.rack import make_full_rack
 from cueai.physics.simulator import Simulator, shot_feature_vector
@@ -73,4 +73,8 @@ def test_collision_transfers_momentum():
         obj_pos=(1.2, 0.635),
         full_rack=False,
     )
-    assert result.endpoints[1][0] > 1.2
+    # The object ball starts at rest, so any speed at all came from the cue ball.
+    obj_speed = np.linalg.norm(result.velocities[1], axis=1)
+    cue_speed = np.linalg.norm(result.velocities[0], axis=1)
+    assert obj_speed.max() > 0.5 * cue_speed.max()
+    assert np.abs(np.diff(result.trajectories[1][:, 0])).sum() > 0.5
