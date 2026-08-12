@@ -63,3 +63,9 @@ def test_simulation_returns_trajectories_and_timings(client: TestClient) -> None
 def test_rejects_out_of_range_shots(client: TestClient) -> None:
     assert client.post("/predict/fast", json={**SOFT_SHOT, "speed": 99.0}).status_code == 422
     assert client.post("/predict/fast", json={**SOFT_SHOT, "english_x": 3.0}).status_code == 422
+
+
+def test_rejects_tip_offsets_past_the_miscue_limit(client: TestClient) -> None:
+    """The model never saw offsets beyond the miscue limit, so the API must not accept them."""
+    assert client.post("/predict/fast", json={**SOFT_SHOT, "english_y": 0.9}).status_code == 422
+    assert client.post("/predict/fast", json={**SOFT_SHOT, "english_y": 0.5}).status_code == 200

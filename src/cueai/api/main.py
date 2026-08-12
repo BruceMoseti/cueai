@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from cueai.ml.dataset import MAX_TIP_OFFSET
 from cueai.ml.infer import TrajectoryPredictor
 from cueai.physics.constants import ShotParams, TableParams
 from cueai.physics.rack import make_full_rack
@@ -39,8 +40,14 @@ _predictor = TrajectoryPredictor(model_dir=_MODEL_DIR)
 class ShotRequest(BaseModel):
     speed: float = Field(4.5, ge=0.1, le=12)
     angle_deg: float = Field(0.0, description="Launch angle in degrees")
-    english_x: float = Field(0.0, ge=-1, le=1)
-    english_y: float = Field(0.0, ge=-1, le=1)
+    # Tip offsets are bounded by the miscue limit, which is also where the
+    # training distribution stops: a request outside it would be extrapolation.
+    english_x: float = Field(
+        0.0, ge=-MAX_TIP_OFFSET, le=MAX_TIP_OFFSET, description="Sidespin tip offset, fraction of R"
+    )
+    english_y: float = Field(
+        0.0, ge=-MAX_TIP_OFFSET, le=MAX_TIP_OFFSET, description="Top/backspin tip offset"
+    )
     cue_elevation_deg: float = 0.0
     cue_x: float = 0.635
     cue_y: float = 0.635
