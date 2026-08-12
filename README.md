@@ -8,13 +8,14 @@
 a learned model that corrects what the closed form misses — roughly 60,000x
 faster than integration, with the accuracy measured and the failure mode stated.**
 
-Predicting where the balls come to rest costs **about 35 seconds per rack shot**
-by numerical integration. This project reduces that to **0.57 ms** with a mean
+Predicting where the balls come to rest costs **about 37 seconds per rack shot**
+by numerical integration. This project reduces that to **0.58 ms** with a mean
 error of **97 mm for direct shots** on a 2.54 x 1.27 m table, and — the part that
 makes it usable — tells you in advance which of its own predictions to trust.
 
-Every number in this README is produced by a script in this repository and
-regenerated with `make all`.
+Every number below comes from this repository: `make all` regenerates the tables
+and figures from scratch, and `make test` checks the physics claims against their
+closed-form references.
 
 ![Draw, stun and follow from the same stroke speed](docs/assets/spin_control.png)
 
@@ -34,10 +35,10 @@ the cue ball and the object ball. Full tables in
 
 | Method | Cost per shot | Mean error | Direct shots (no cushion) | R² |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16 balls | 35.2 s | — (ground truth) | — | — |
+| Numerical simulator, 16 balls | 36.8 s | — (ground truth) | — | — |
 | Closed-form solver, no fitting | 0.26 ms | 494 mm | 114 mm | 0.01 |
 | Gradient boosting on the same features | 2.5 ms | 385 mm | 160 mm | 0.51 |
-| **Closed form + learned residual** | **0.57 ms** | **378 mm** | **97 mm** | 0.42 |
+| **Closed form + learned residual** | **0.58 ms** | **378 mm** | **97 mm** | 0.42 |
 
 The learned residual has the lowest error of the three, is four times cheaper to
 evaluate than the boosted trees, and is the only one that improves on the physics
@@ -45,6 +46,31 @@ for the shots where physics is nearly sufficient. Gradient boosting posts the
 higher R² by hedging toward the middle of the table on shots nobody can predict,
 which flatters the variance-explained metric and costs it 60 mm on the shots that
 matter.
+
+### What that average hides
+
+Two thirds of sampled shots never actually reach the object ball. It stays where
+it started, which the closed-form baseline predicts *exactly*, so those rows
+donate a free zero to half of the error metric. Splitting them out, in mm:
+
+| Ball-ball contact | Share | Closed form cue / object | Boosting cue / object | CueNet cue / object |
+|---|---:|---:|---:|---:|
+| no | 67.6% | 585 / **0** | 468 / 76 | 411 / 18 |
+| yes | 32.4% | 1032 / 797 | **638 / 606** | 738 / 701 |
+
+Two things fall out of this that are worth saying plainly.
+
+The residual formulation earns its keep on the shots where nothing happens: it
+adds 18 mm of spurious object-ball motion against gradient boosting's 76 mm,
+because "predict zero correction" is its default rather than something it has to
+learn.
+
+And it loses on the shots where a collision has to be modelled: 738 mm against
+638 mm for the cue ball. That is the cost of anchoring to a baseline with a blind
+spot — the closed-form solver has no ball-ball contact model at all, so on a third
+of the shot space the residual is asked to undo a metre of error rather than
+refine a good guess. Giving the closed form even a crude ghost-ball collision
+would be the highest-value next change, and it is a physics change, not an ML one.
 
 ### Where it stops working, and why that is the interesting part
 
@@ -62,7 +88,7 @@ usable statement, while "378 mm mean error" is not.
 ![Error against coverage](docs/assets/reliability.png)
 
 The breakdown above is sliced by what the simulator *did*, which you only know
-after paying the 35 seconds. That makes it an autopsy, not a control.
+after paying the 37 seconds. That makes it an autopsy, not a control.
 
 But the closed-form solver reports how many cushions it *expects* on the way to
 its answer, and that number is already computed as part of the prediction, so it
@@ -114,12 +140,13 @@ git clone https://github.com/BruceMoseti/cueai && cd cueai
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-make test          # 39 tests, including the closed-form validation suite
+make test          # 43 tests, including the closed-form validation suite
 make all           # regenerate the dataset, model, benchmarks and figures
 ```
 
-`make all` runs about 20 minutes end to end: simulating 20,000 shots takes most
-of it, in parallel across available cores.
+`make all` takes about 20 minutes end to end on eight cores, of which 15 are
+simulating the 20,000 training shots. Generation is seeded per sample, so the
+dataset it produces is identical to the one behind the numbers above.
 
 ### Serve predictions
 
@@ -170,8 +197,10 @@ and 225 mm across one rail.
 endpoint to the simulated one. Its output head starts at zero, so training begins
 from "trust the physics" and departs only where the data insists. Its inputs
 include the closed-form solver's own conclusions — predicted endpoint, expected
-cushion count, expected pot, ghost-ball contact geometry — which is what took the
-error on clean shots from 191 mm (worse than physics alone) to 97 mm.
+cushion count, expected pot, ghost-ball contact geometry. An ablation on the same
+architecture, epochs, seed and split puts a number on that: fed raw shot
+parameters alone it scores 173 mm on direct shots, worse than the 114 mm of the
+physics it was meant to improve; fed the solver's conclusions as well, 97 mm.
 
 ## What this demonstrates
 
@@ -229,7 +258,7 @@ src/cueai/
     features.py     one feature path for training and serving
     model.py        CueNet, zero-initialised residual head
     train.py        training, baseline comparison, stratified evaluation
-    infer.py        predict_fast (0.57 ms) and predict (full simulation)
+    infer.py        predict_fast (0.58 ms) and predict (full simulation)
   api/main.py       FastAPI service
   ui/app.py         PyQt6 interactive table
   vision/overlay.py OpenCV trajectory overlays
@@ -255,13 +284,14 @@ scripts/
   systematically off for heavy sidespin.
 - Multi-rail outcomes are not usefully predictable by any of the three methods
   here, as measured above.
-- The fast path predicts *where balls stop*; it is not an aiming aid. The window
-  that pots a ball is 0.15° to 0.25° wide on the layout measured in
-  [docs/DESIGN.md](docs/DESIGN.md), roughly ten times finer than the surrogate can
-  resolve. Aiming is exact closed-form geometry anyway, and needs no model.
+- The fast path predicts *where balls stop*; it is not an aiming aid. On the layout
+  in [docs/DESIGN.md](docs/DESIGN.md) the window that pots a ball is a quarter of a
+  degree wide — `tests/test_validation.py` asserts that the ghost-ball line pots and
+  half a degree off misses — roughly ten times finer than the surrogate resolves.
+  Aiming is exact closed-form geometry anyway, and needs no model.
 - The reference simulator is straightforward Python. It is a definition of truth,
-  not a fast engine; the vectorisation work stopped once the hot loop was 6x
-  cheaper.
+  not a fast engine; optimisation stopped once the collision loop was no longer
+  the obvious bottleneck.
 
 ## References
 
