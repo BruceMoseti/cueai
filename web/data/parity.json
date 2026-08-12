@@ -5,6 +5,6 @@
   "worst_case": "break-6ms",
   "table_seconds": 155.76400000000493,
   "python_seconds": 38.60540390199458,
-  "browser_seconds": 0.596764292,
-  "speedup": 64.6912096107697
+  "browser_seconds": 0.5890029370000001,
+  "speedup": 65.54365263206586
 }
