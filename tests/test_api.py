@@ -46,6 +46,15 @@ def test_fast_prediction_stays_on_the_table(client: TestClient) -> None:
     assert body["timing_ms"] < 50
 
 
+def test_fast_prediction_omits_the_object_ball_when_none_was_given(client: TestClient) -> None:
+    """Reporting a position for a ball the caller never placed would be noise."""
+    body = client.post("/predict/fast", json=SOFT_SHOT).json()
+    assert body["endpoints"]["object"] is None
+
+    with_object = client.post("/predict/fast", json={**SOFT_SHOT, "obj_x": 1.4, "obj_y": 0.7})
+    assert len(with_object.json()["endpoints"]["object"]) == 2
+
+
 def test_fast_prediction_is_reproducible(client: TestClient) -> None:
     first = client.post("/predict/fast", json=SOFT_SHOT).json()
     second = client.post("/predict/fast", json=SOFT_SHOT).json()

@@ -140,7 +140,7 @@ git clone https://github.com/BruceMoseti/cueai && cd cueai
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-make test          # 43 tests, including the closed-form validation suite
+make test          # 44 tests, including the closed-form validation suite
 make all           # regenerate the dataset, model, benchmarks and figures
 ```
 

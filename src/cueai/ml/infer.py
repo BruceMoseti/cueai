@@ -125,10 +125,19 @@ class TrajectoryPredictor:
             self.residual_batch(features)[0] if (use_ml and self.ready) else np.zeros(4)
         )
         corrected = baseline + residual
+        # With no object ball there is nothing for the object channel to refer to,
+        # so it is reported as absent rather than as a position near the origin.
+        has_object = baseline_obj is not None
         return {
-            "baseline_endpoints": {"cue": baseline[:2].tolist(), "object": baseline[2:].tolist()},
+            "baseline_endpoints": {
+                "cue": baseline[:2].tolist(),
+                "object": baseline[2:].tolist() if has_object else None,
+            },
             "residual": residual.tolist(),
-            "endpoints": {"cue": corrected[:2].tolist(), "object": corrected[2:].tolist()},
+            "endpoints": {
+                "cue": corrected[:2].tolist(),
+                "object": corrected[2:].tolist() if has_object else None,
+            },
             "backend": self.backend if use_ml else "closed_form",
         }
 
