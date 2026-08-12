@@ -5,24 +5,74 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **A physics simulator for billiards, a closed-form solution that replaces it, and
-a learned model that corrects what the closed form misses — roughly 60,000x
-faster than integration, with the accuracy measured and the failure mode stated.**
+a learned model that corrects what the closed form misses — roughly 7,600x
+faster than integration, with the accuracy measured and the failure mode stated.
+Plus a browser game against a search-based bot, running the same physics.**
 
-Predicting where the balls come to rest costs **about 37 seconds per rack shot**
-by numerical integration. This project reduces that to **0.58 ms** with a mean
-error of **97 mm for direct shots** on a 2.54 x 1.27 m table, and — the part that
+Predicting where the balls come to rest costs **about 4.6 seconds per rack shot**
+by numerical integration. This project reduces that to **0.60 ms** with a mean
+error of **98 mm for direct shots** on a 2.54 x 1.27 m table, and — the part that
 makes it usable — tells you in advance which of its own predictions to trust.
 
 Every number below comes from this repository: `make all` regenerates the tables
 and figures from scratch, and `make test` checks the physics claims against their
 closed-form references.
 
-![Draw, stun and follow from the same stroke speed](docs/assets/spin_control.png)
+---
 
-*One stroke speed, three cue tip heights. Backspin brings the cue ball back
-behind where it started, a centre-ball hit stops it dead at the object ball,
-topspin sends it through. All three come out of the cloth model, not from
-special-casing.*
+## Play it
+
+### **[▶ Play eight-ball against the bot](https://brucemoseti.github.io/cueai/)**
+
+![Eight-ball against the search bot, in the browser](docs/assets/web_demo.gif)
+
+No install, no build step, no framework — `web/` is plain ES modules, and the
+whole thing is served as static files. Aim with the mouse, drag back from the
+cue ball to strike, click the cue-ball diagram to move the tip off centre.
+
+The browser is not running a lookalike physics engine. `web/js/physics.js` is a
+hand port of `src/cueai/physics/`, and the port is measured rather than
+asserted: `scripts/export_parity_cases.py` runs 35 shots through the Python
+simulator — draw, follow, english off two rails, thin cuts, clusters and full
+sixteen-ball breaks — and `web/test/parity.mjs` replays every one of them in
+Node and compares where each ball stopped.
+
+| | |
+|---|---:|
+| Reference shots replayed | 35 |
+| Worst disagreement, any ball, any shot | **1.2 × 10⁻³ mm** |
+| Table time compared | 156 s |
+| Browser against the Python reference | **49× faster** |
+
+Continuous integration runs that check on every push and refuses to deploy the
+page if the two drift apart.
+
+**The opponent is a search, and that is the argument.** Aiming needs no learned
+model: the ghost-ball construction is exact, and a test asserts that aiming at
+it pots the ball while half a degree either side misses. So the bot spends
+nothing on aiming. It enumerates every ball-and-pocket pair in closed form,
+discards what is blocked or cut too thin, and spends its entire budget
+*simulating* the survivors to see what each one leaves behind. The panel reports
+how many candidates it enumerated, how many it simulated, and how much table
+time that cost. That is what cheap physics buys: the number of futures you can
+afford to look at.
+
+**The panels are there to be read.** A live inspector traces the cue ball's
+centre-of-mass speed against its contact-point slip while the shot is in flight,
+and draws the predicted `5/7·v₀` rolling speed as a line the measured curve has
+to land on. When the ball hits something before it finishes sliding, the panel
+says so and drops the prediction rather than showing a miss. Below the table,
+[a written explainer](https://brucemoseti.github.io/cueai/#how) covers the cloth
+model, the parity harness, the bot's search, where the learned surrogate helps
+and where it does not — including
+[the multi-ball contact bug](#the-bug-the-tests-could-not-see) that the
+single-ball validation suite could never have caught.
+
+```bash
+make play      # serve it at http://localhost:8123
+make web       # parity against Python, then 20 headless bot-vs-bot games
+make browser   # drive the real page in Chrome and play two games end to end
+```
 
 ---
 
@@ -35,16 +85,16 @@ the cue ball and the object ball. Full tables in
 
 | Method | Cost per shot | Mean error | Direct shots (no cushion) | R² |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16 balls | 36.8 s | — (ground truth) | — | — |
-| Closed-form solver, no fitting | 0.26 ms | 494 mm | 114 mm | 0.01 |
-| Gradient boosting on the same features | 2.5 ms | 385 mm | 160 mm | 0.51 |
-| **Closed form + learned residual** | **0.58 ms** | **378 mm** | **97 mm** | 0.42 |
+| Numerical simulator, 16 balls | 4.6 s | — (ground truth) | — | — |
+| Closed-form solver, no fitting | 0.27 ms | 494 mm | 114 mm | 0.01 |
+| Gradient boosting on the same features | 2.6 ms | 382 mm | 162 mm | 0.52 |
+| **Closed form + learned residual** | **0.60 ms** | **376 mm** | **98 mm** | 0.43 |
 
 The learned residual has the lowest error of the three, is four times cheaper to
 evaluate than the boosted trees, and is the only one that improves on the physics
 for the shots where physics is nearly sufficient. Gradient boosting posts the
 higher R² by hedging toward the middle of the table on shots nobody can predict,
-which flatters the variance-explained metric and costs it 60 mm on the shots that
+which flatters the variance-explained metric and costs it 64 mm on the shots that
 matter.
 
 ### What that average hides
@@ -55,17 +105,17 @@ donate a free zero to half of the error metric. Splitting them out, in mm:
 
 | Ball-ball contact | Share | Closed form cue / object | Boosting cue / object | CueNet cue / object |
 |---|---:|---:|---:|---:|
-| no | 67.6% | 585 / **0** | 468 / 76 | 411 / 18 |
-| yes | 32.4% | 1032 / 797 | **638 / 606** | 738 / 701 |
+| no | 67.6% | 585 / **0** | 457 / 77 | 411 / 16 |
+| yes | 32.4% | 1033 / 798 | **638 / 610** | 736 / 696 |
 
 Two things fall out of this that are worth saying plainly.
 
 The residual formulation earns its keep on the shots where nothing happens: it
-adds 18 mm of spurious object-ball motion against gradient boosting's 76 mm,
+adds 16 mm of spurious object-ball motion against gradient boosting's 77 mm,
 because "predict zero correction" is its default rather than something it has to
 learn.
 
-And it loses on the shots where a collision has to be modelled: 738 mm against
+And it loses on the shots where a collision has to be modelled: 736 mm against
 638 mm for the cue ball. That is the cost of anchoring to a baseline with a blind
 spot — the closed-form solver has no ball-ball contact model at all, so on a third
 of the shot space the residual is asked to undo a metre of error rather than
@@ -81,14 +131,14 @@ ricocheting between cushions. After two or three rail contacts, a millimetre of
 cue placement moves the outcome by a table length. The error breakdown above is
 published instead of hidden inside a single average, because "this model predicts
 direct and one-rail shots to about 10 cm and multi-rail scatter not at all" is a
-usable statement, while "378 mm mean error" is not.
+usable statement, while "376 mm mean error" is not.
 
 ### Knowing which predictions to trust, before making them
 
 ![Error against coverage](docs/assets/reliability.png)
 
 The breakdown above is sliced by what the simulator *did*, which you only know
-after paying the 37 seconds. That makes it an autopsy, not a control.
+after paying the 4.6 seconds. That makes it an autopsy, not a control.
 
 But the closed-form solver reports how many cushions it *expects* on the way to
 its answer, and that number is already computed as part of the prediction, so it
@@ -99,15 +149,15 @@ as a gate:
 |---|---:|---:|
 | No cushion | 9.8% | **100 mm** |
 | At most one cushion | 27.5% | 189 mm |
-| At most two cushions | 50.0% | 253 mm |
-| Anything (no gate) | 100% | 378 mm |
+| At most two cushions | 50.0% | 251 mm |
+| Anything (no gate) | 100% | 376 mm |
 
-So the fast path is not a 378 mm model. It is a 100 mm model that knows it should
-decline nine shots in ten, or a 253 mm model over half the shot space, and the
+So the fast path is not a 376 mm model. It is a 100 mm model that knows it should
+decline nine shots in ten, or a 251 mm model over half the shot space, and the
 shots it declines can be sent to the simulator. A surrogate that reports its own
 applicability domain can be deployed; one with a single headline error cannot.
 The learned residual is also the most accurate of the three models at every
-coverage level, which is a stronger claim than its 1.9% edge on the overall mean.
+coverage level, which is a stronger claim than its 1.6% edge on the overall mean.
 
 ### Speed
 
@@ -131,6 +181,44 @@ and the friction torque in opposite handedness, so friction drove a struck ball
 of `5/7 v₀`, and stopping distances were four times short. Nothing in the code
 looked wrong. A closed-form comparison found it immediately.
 
+![Draw, stun and follow from the same stroke speed](docs/assets/spin_control.png)
+
+*One stroke speed, three cue tip heights. Backspin brings the cue ball back
+behind where it started, a centre-ball hit stops it dead at the object ball,
+topspin sends it through. All three come out of the cloth model, not from
+special-casing.*
+
+### The bug the tests could not see
+
+Closed-form checks exercise one ball at a time, so a defect that only exists
+*between* balls survives all of them. This one did.
+
+The collision solver counted two balls as touching when the gap between their
+surfaces was under `1e-4 m`, and `rack.py` built the triangle with a `1e-4 m`
+clearance. All thirty contacts in the rack therefore sat exactly on the
+threshold, and which side each one fell on came down to whether `hypot` rounded
+up or down. Sixteen registered. Fourteen did not.
+
+The consequence was a break propagating through a contact graph with holes in
+it: balls in the middle of the rack came out of a full-power break having barely
+moved, and — the tell — the table opened up *less* the harder it was struck. No
+test failed. It was found by measuring break spread against cue speed and
+getting the sign wrong.
+
+The fix was to give the tolerance a name (`CONTACT_BAND = 1e-5`), use that one
+everywhere the solver asks whether two balls are in contact, and rack the balls
+actually touching so nothing sits on the boundary. Three regression tests now
+hold it: every contact in a fresh rack is inside the band, the band is orders of
+magnitude away from both the floating-point noise below it and the rack spacing
+above it, and resolving an untouched rack changes nothing and converges on the
+first pass.
+
+The general point is that a validation suite is only as broad as the situations
+it constructs. Ten exact single-ball tests passing is not evidence about
+sixteen balls in contact, and the property that eventually caught this — *harder
+breaks spread further* — is one nobody thinks to assert because it is too
+obvious to be worth stating.
+
 ![16-ball break](docs/assets/break_shot.png)
 
 ## Try it
@@ -140,7 +228,10 @@ git clone https://github.com/BruceMoseti/cueai && cd cueai
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-make test          # 44 tests, including the closed-form validation suite
+make test          # the whole suite, including closed-form validation
+make check         # ruff, mypy, tests — what CI runs on the Python side
+make play          # serve the playable table at http://localhost:8123
+make web           # browser physics against Python, then 20 headless games
 make all           # regenerate the dataset, model, benchmarks and figures
 ```
 
@@ -199,8 +290,8 @@ from "trust the physics" and departs only where the data insists. Its inputs
 include the closed-form solver's own conclusions — predicted endpoint, expected
 cushion count, expected pot, ghost-ball contact geometry. An ablation on the same
 architecture, epochs, seed and split puts a number on that: fed raw shot
-parameters alone it scores 173 mm on direct shots, worse than the 114 mm of the
-physics it was meant to improve; fed the solver's conclusions as well, 97 mm.
+parameters alone it scores 179 mm on direct shots, worse than the 114 mm of the
+physics it was meant to improve; fed the solver's conclusions as well, 98 mm.
 
 ## What this demonstrates
 
@@ -237,11 +328,20 @@ serving construct features through one function, and a test pins the two paths
 together, because train/serve skew degrades a model quietly instead of failing
 loudly.
 
+**Porting a numerical kernel without letting it drift.** The same physics exists
+twice, in Python and in JavaScript, because the browser needed it and the
+reference had to stay the reference. A port that nobody measures is a rumour, so
+the two are pinned to each other by 35 recorded shots and compared to a
+thousandth of a millimetre in CI. The one number that made it worth doing is the
+49× speedup, which is what turns "simulate the candidate shots" from a claim
+into the thing the bot actually does inside a turn.
+
 **Deployability.** The residual model exports to ONNX and runs through ONNX
 Runtime with no PyTorch in the serving path. PyQt and OpenCV are optional extras,
 so the package installs headless. CI lints, type-checks and tests on three Python
 versions, then runs the whole data to model to benchmark to figures pipeline and
-uploads the artefacts.
+uploads the artefacts. The playable page deploys to GitHub Pages only after the
+parity check and a run of headless games have passed.
 
 ## Repository map
 
@@ -258,10 +358,26 @@ src/cueai/
     features.py     one feature path for training and serving
     model.py        CueNet, zero-initialised residual head
     train.py        training, baseline comparison, stratified evaluation
-    infer.py        predict_fast (0.58 ms) and predict (full simulation)
+    infer.py        predict_fast (0.60 ms) and predict (full simulation)
   api/main.py       FastAPI service
   ui/app.py         PyQt6 interactive table
   vision/overlay.py OpenCV trajectory overlays
+
+web/                 the playable table: dependency-free ES modules
+  js/
+    physics.js      hand port of src/cueai/physics/, checked against it
+    rack.js         the same rack geometry, ported
+    game.js         eight-ball rules, fouls, group assignment
+    bot.js          closed-form candidate pots, then simulated rollouts
+    aim.js          ghost-ball geometry and the first-contact search
+    render.js       canvas drawing: table, balls, cue, aim overlay
+    inspector.js    the live cue-ball trace against 5/7·v₀
+    main.js         input, the fixed-timestep loop, whose turn it is
+  test/
+    parity.mjs      replays the Python reference shots, compares endpoints
+    selfplay.mjs    headless bot-against-bot games, every rule branch
+    browser.mjs     drives the real page in Chrome, fails on console errors
+    capture.mjs     records the screenshots and the clip in this README
 
 tests/
   test_validation.py  closed-form physics validation
@@ -271,8 +387,10 @@ tests/
   test_api.py         HTTP contract
 
 scripts/
-  benchmark.py      writes docs/BENCHMARKS.md
-  make_figures.py   writes docs/assets/*.png
+  benchmark.py           writes docs/BENCHMARKS.md
+  make_figures.py        writes docs/assets/*.png
+  export_parity_cases.py writes the reference shots the browser is held to
+  site_facts.py          writes the measured numbers the web page quotes
 ```
 
 ## Limitations

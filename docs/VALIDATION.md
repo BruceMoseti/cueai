@@ -47,6 +47,43 @@ because friction both slows the ball and spins it up:
 | Ghost-ball aim line | pots the ball; ±0.5° misses | — | holds |
 | Timestep convergence, full-ball contact | 2 ms vs 1 ms | 10 mm | 3 mm |
 | Timestep convergence, thin cut | 2 ms vs 1 ms | 60 mm | 46 mm |
+| Contacts a racked triangle presents | 30 | exact | 30 |
+| Balls set moving by a full-power break | all 15 | — | holds |
+
+## The bug none of the above could see
+
+Every property in that table concerns one ball, or two. A defect that lives in
+the relationship between fifteen of them passes all of it, and one did.
+
+Two balls were treated as touching when the gap between their surfaces was at
+most `1e-4 m`. The rack was built with a `1e-4 m` clearance. So all thirty
+contacts in the triangle sat exactly on the threshold that decides whether a
+contact exists, and which side each one landed on was decided by whether
+`hypot` rounded up or down for that particular pair. Sixteen registered.
+Fourteen did not.
+
+The consequences were visible only in aggregate. A break propagated through a
+contact graph with holes in it, so balls in the middle of the rack came out of
+a full-power break having barely moved, and mean pairwise separation after a
+break *fell* as cue speed rose — the table opened up less the harder it was
+struck:
+
+| Cue speed | 3 m/s | 5 m/s | 6.5 m/s | 8.2 m/s | 10 m/s |
+|---|---:|---:|---:|---:|---:|
+| Before, mean pair separation | 0.32 m | 0.57 m | 0.53 m | 0.46 m | 0.51 m |
+| After | 0.31 m | 0.62 m | 0.59 m | 0.54 m | 0.56 m |
+
+Averaged over 40 racks each. It was found by measuring that relationship and
+getting the sign wrong, not by a test going red — and not by the browser parity
+harness either, which reproduced the broken contact graph to eleven decimal
+places because it was a faithful port of it. Two implementations agreeing is
+evidence about the port, and about nothing else.
+
+The tolerance now has a name, `CONTACT_BAND`, the broad and narrow phases use
+the same one, and the balls are racked touching so that nothing sits on the
+boundary. Tests assert all three, including that the band stays far from both
+the floating-point noise that would swallow it and the physical scale that
+would make it meaningless.
 
 ## Is the reference converged?
 

@@ -4,7 +4,7 @@
 
 Simulating a billiards shot accurately is slow. Sixteen bodies, each in one of
 four motion states, with collisions resolved every millisecond, costs about
-**37 seconds per rack shot** in this implementation. Anything that needs many
+**4.6 seconds per rack shot** in this implementation. Anything that needs many
 shot outcomes — searching for a good shot, estimating the odds of a break,
 training a policy — cannot afford that.
 
@@ -20,15 +20,15 @@ shot parameters (speed, angle, tip offset, cue position, cloth μ, cushion e)
         |                             |
         v                             v
   closed-form solver             CueNet residual
-  (exact segments, 0.26 ms)      (what the closed form misses)
+  (exact segments, 0.27 ms)      (what the closed form misses)
         |                             |
         +--------------+--------------+
                        v
-              predicted resting positions        0.58 ms total
+              predicted resting positions        0.60 ms total
                        :
                        : compared against
                        v
-              numerical simulator                37 s, ground truth
+              numerical simulator                4.6 s, ground truth
 ```
 
 ## Three tiers, on purpose
@@ -73,12 +73,12 @@ epochs, seed and split, so the claim is not a story about an earlier commit:
 
 | CueNet inputs | All shots | Direct shots |
 |---|---:|---:|
-| Raw shot parameters only | 473 mm | 173 mm |
-| Plus the closed-form solver's output | 378 mm | 97 mm |
+| Raw shot parameters only | 469 mm | 179 mm |
+| Plus the closed-form solver's output | 376 mm | 98 mm |
 | _closed form alone, for reference_ | 494 mm | 114 mm |
 
 Without the physics features the network is *worse than the physics* on the shots
-the physics nearly solves — 173 mm against 114 mm — while still beating it on
+the physics nearly solves — 179 mm against 114 mm — while still beating it on
 average, which is exactly the failure that a single headline number conceals. With
 them it is better on both. The predicted cushion count does double duty: it also
 lets the model recognise a chaotic shot and hedge instead of guessing, and it is
@@ -98,7 +98,7 @@ average. The residual model is the best of the three for shots with 0, 1 or 2
 cushion contacts; past that, plain gradient boosting edges ahead by hedging
 harder toward the middle of the table. The reported spread ratio makes that
 visible: CueNet reproduces 97% of the true spread in the predictable buckets and
-87% in the chaotic one.
+86% in the chaotic one.
 
 ## Reporting confidence without a second model
 
@@ -111,8 +111,8 @@ and it is a good enough proxy for "is this outcome chaotic" to gate on:
 |---|---:|---:|
 | No cushion | 9.8% | 100 mm |
 | At most one | 27.5% | 189 mm |
-| At most two | 50.0% | 253 mm |
-| Anything | 100% | 378 mm |
+| At most two | 50.0% | 251 mm |
+| Anything | 100% | 376 mm |
 
 ![Error against coverage](assets/reliability.png)
 
@@ -121,11 +121,11 @@ choose an error budget, take the coverage that comes with it, and route the
 remainder to the simulator. The alternative — a single headline error over a
 distribution that mixes 100 mm shots with 700 mm shots — gives a caller no way to
 act. The residual model happens to be the most accurate of the three at every
-coverage level, which is a more robust claim than its 1.9% edge on the mean.
+coverage level, which is a more robust claim than its 1.6% edge on the mean.
 
 ## What the surrogate is and is not good enough for
 
-Worth being precise, because "0.58 ms billiards predictor" invites the wrong
+Worth being precise, because "0.60 ms billiards predictor" invites the wrong
 conclusion.
 
 **Not accurate enough to aim with.** On a representative layout — cue ball at
@@ -150,10 +150,10 @@ any of the aggregate error numbers.
 
 **Weakest exactly where the baseline is weakest.** Two thirds of sampled shots
 never reach the object ball, and for those the baseline's "it stays put" is exactly
-right, so the reported object-ball error of 239 mm is mostly an average over free
-zeros. On the third of shots that do involve a collision, the numbers are 738 mm
-for the cue ball and 701 mm for the object ball — and plain gradient boosting beats
-the residual model there, 638 mm and 606 mm.
+right, so the reported object-ball error of 236 mm is mostly an average over free
+zeros. On the third of shots that do involve a collision, the numbers are 736 mm
+for the cue ball and 696 mm for the object ball — and plain gradient boosting beats
+the residual model there, 638 mm and 610 mm.
 
 That is a structural consequence of the design rather than a tuning problem. The
 closed-form solver has no ball-ball contact model, so on a collision it can be a
@@ -164,8 +164,8 @@ or more data: it is giving the closed-form solver a ghost-ball collision so the
 baseline it hands over is worth correcting.
 
 The residual formulation wins the other side of that trade. On shots where nothing
-happens it introduces 18 mm of spurious object-ball motion against gradient
-boosting's 76 mm, because "predict no correction" is where it starts rather than
+happens it introduces 16 mm of spurious object-ball motion against gradient
+boosting's 77 mm, because "predict no correction" is where it starts rather than
 something it has to infer.
 
 So the honest summary: a good surrogate for the *distribution* of low-cushion

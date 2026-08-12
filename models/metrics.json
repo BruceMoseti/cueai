@@ -3,89 +3,89 @@
   "n_test": 4000,
   "epochs": 300,
   "hidden": 256,
-  "final_train_loss": 0.0555788203742769,
+  "final_train_loss": 0.05557978451251984,
   "models": {
     "analytic": {
-      "mae_mm": 308.64862060546875,
-      "euclidean_mm": 494.0398254394531,
-      "p95_mm": 1780.2044677734375,
-      "cue_mm": 729.75244140625,
-      "obj_mm": 258.32720947265625,
-      "r2": 0.012712541067854244
+      "mae_mm": 308.66009521484375,
+      "euclidean_mm": 494.02587890625,
+      "p95_mm": 1777.5478515625,
+      "cue_mm": 729.7384033203125,
+      "obj_mm": 258.3133544921875,
+      "r2": 0.013224394297231212
     },
     "gbm": {
-      "mae_mm": 244.85528378884294,
-      "euclidean_mm": 385.31390765756873,
-      "p95_mm": 1187.8417366883857,
-      "cue_mm": 523.0046267111934,
-      "obj_mm": 247.62318860394413,
-      "r2": 0.513587298269
+      "mae_mm": 243.47491761920614,
+      "euclidean_mm": 382.44517827535526,
+      "p95_mm": 1163.1076422861256,
+      "cue_mm": 515.7021449395502,
+      "obj_mm": 249.18821161116028,
+      "r2": 0.5207620486955216
     },
     "cuenet": {
-      "mae_mm": 238.468505859375,
-      "euclidean_mm": 378.03277587890625,
-      "p95_mm": 1336.19287109375,
-      "cue_mm": 516.9376831054688,
-      "obj_mm": 239.12789916992188,
-      "r2": 0.4229213031494553
+      "mae_mm": 237.5008544921875,
+      "euclidean_mm": 376.185791015625,
+      "p95_mm": 1292.6614990234375,
+      "cue_mm": 516.0587158203125,
+      "obj_mm": 236.31285095214844,
+      "r2": 0.4314108586578608
     }
   },
   "by_cushion_contacts": [
     {
       "cushion_contacts": "0",
       "n": 414,
-      "analytic": 113.5965805053711,
-      "gbm": 160.16463905357838,
-      "cuenet": 97.30941009521484,
-      "cuenet_spread_ratio": 0.9693210124969482
+      "analytic": 113.5447998046875,
+      "gbm": 161.661007928057,
+      "cuenet": 98.3550033569336,
+      "cuenet_spread_ratio": 0.9720291495323181
     },
     {
       "cushion_contacts": "1",
       "n": 650,
-      "analytic": 224.67816162109375,
-      "gbm": 222.7237654061285,
-      "cuenet": 192.8095245361328,
-      "cuenet_spread_ratio": 0.9661588668823242
+      "analytic": 224.95225524902344,
+      "gbm": 222.43481668532624,
+      "cuenet": 186.57786560058594,
+      "cuenet_spread_ratio": 0.9690799713134766
     },
     {
       "cushion_contacts": "2",
-      "n": 875,
-      "analytic": 370.4058532714844,
-      "gbm": 290.8355775214186,
-      "cuenet": 288.03424072265625,
-      "cuenet_spread_ratio": 0.9679858684539795
+      "n": 876,
+      "analytic": 370.912109375,
+      "gbm": 289.2407014788066,
+      "cuenet": 281.2088928222656,
+      "cuenet_spread_ratio": 0.952953577041626
     },
     {
       "cushion_contacts": "3+",
-      "n": 2061,
-      "analytic": 707.9011840820312,
-      "gbm": 521.9291083051279,
-      "cuenet": 531.047607421875,
-      "cuenet_spread_ratio": 0.8685411810874939
+      "n": 2060,
+      "analytic": 707.74658203125,
+      "gbm": 516.9395973195673,
+      "cuenet": 532.2376708984375,
+      "cuenet_spread_ratio": 0.8552145957946777
     }
   ],
   "by_object_ball_contact": [
     {
       "object_ball_contact": "no",
-      "n": 2704,
+      "n": 2705,
       "share_pct": 67.6,
-      "analytic_cue_mm": 584.984130859375,
-      "analytic_obj_mm": 1.0874216968659312e-05,
-      "gbm_cue_mm": 467.8886198252336,
-      "gbm_obj_mm": 76.08049265392877,
-      "cuenet_cue_mm": 411.0569763183594,
-      "cuenet_obj_mm": 17.788074493408203
+      "analytic_cue_mm": 584.77587890625,
+      "analytic_obj_mm": 1.0870197002077475e-05,
+      "gbm_cue_mm": 457.21557076675373,
+      "gbm_obj_mm": 76.60472891374283,
+      "cuenet_cue_mm": 410.94439697265625,
+      "cuenet_obj_mm": 16.42076873779297
     },
     {
       "object_ball_contact": "yes",
-      "n": 1296,
+      "n": 1295,
       "share_pct": 32.4,
-      "analytic_cue_mm": 1031.7999267578125,
-      "analytic_obj_mm": 797.30615234375,
-      "gbm_cue_mm": 637.999752189307,
-      "gbm_obj_mm": 605.533257931754,
-      "cuenet_cue_mm": 737.8493041992188,
-      "cuenet_obj_mm": 700.9357299804688
+      "analytic_cue_mm": 1032.5364990234375,
+      "analytic_obj_mm": 797.8789672851562,
+      "gbm_cue_mm": 637.8690817251982,
+      "gbm_obj_mm": 609.6811233459201,
+      "cuenet_cue_mm": 735.621826171875,
+      "cuenet_obj_mm": 695.6240844726562
     }
   ],
   "risk_coverage": [
@@ -93,53 +93,53 @@
       "expected_cushions_at_most": "0",
       "n": 390,
       "coverage_pct": 9.8,
-      "analytic": 113.11882019042969,
-      "gbm": 158.0086885424552,
-      "cuenet": 100.08148193359375
+      "analytic": 113.08963775634766,
+      "gbm": 159.65888517893276,
+      "cuenet": 99.91382598876953
     },
     {
       "expected_cushions_at_most": "1",
       "n": 1098,
       "coverage_pct": 27.5,
-      "analytic": 240.16458129882812,
-      "gbm": 220.4929185751551,
-      "cuenet": 189.36886596679688
+      "analytic": 240.04368591308594,
+      "gbm": 220.96904733242332,
+      "cuenet": 189.33424377441406
     },
     {
       "expected_cushions_at_most": "2",
       "n": 2002,
       "coverage_pct": 50.0,
-      "analytic": 333.6151123046875,
-      "gbm": 265.91997078158806,
-      "cuenet": 252.90367126464844
+      "analytic": 333.79351806640625,
+      "gbm": 265.3830192910306,
+      "cuenet": 250.65756225585938
     },
     {
       "expected_cushions_at_most": "3",
       "n": 2748,
       "coverage_pct": 68.7,
-      "analytic": 401.1279602050781,
-      "gbm": 315.6802969586645,
-      "cuenet": 305.8078918457031
+      "analytic": 401.277587890625,
+      "gbm": 314.3183330140579,
+      "cuenet": 303.30987548828125
     },
     {
       "expected_cushions_at_most": "all",
       "n": 4000,
       "coverage_pct": 100.0,
-      "analytic": 494.0398254394531,
-      "gbm": 385.31390765756873,
-      "cuenet": 378.03277587890625
+      "analytic": 494.02587890625,
+      "gbm": 382.44517827535526,
+      "cuenet": 376.185791015625
     }
   ],
   "feature_ablation": {
     "note": "identical architecture, epochs, seed and split; the ablated model sees only raw shot parameters, not the closed-form solver's output",
-    "shot_features_only_mm": 472.97308349609375,
-    "with_closed_form_features_mm": 378.03277587890625,
-    "shot_features_only_direct_mm": 172.84823608398438,
-    "with_closed_form_features_direct_mm": 97.30941009521484,
-    "analytic_direct_mm": 113.5965805053711
+    "shot_features_only_mm": 469.4621276855469,
+    "with_closed_form_features_mm": 376.185791015625,
+    "shot_features_only_direct_mm": 179.4994659423828,
+    "with_closed_form_features_direct_mm": 98.3550033569336,
+    "analytic_direct_mm": 113.5447998046875
   },
-  "error_reduction_vs_analytic_pct": 23.5,
-  "error_reduction_vs_gbm_pct": 1.9,
+  "error_reduction_vs_analytic_pct": 23.9,
+  "error_reduction_vs_gbm_pct": 1.6,
   "environment": {
     "python": "3.12.3",
     "torch": "2.13.0+cpu",

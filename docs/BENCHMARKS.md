@@ -9,12 +9,12 @@ Regenerate with `python scripts/benchmark.py`. Single CPU core, no GPU.
 
 | Method | Mean | Median | p95 | Speedup vs full rack |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16-ball rack | 36.8 s | 36.7 s | 37.2 s | — |
-| Numerical simulator, cue + object ball | 345.1 ms | 345.1 ms | 345.7 ms | 107x |
-| Closed-form solver (no ML) | 0.261 ms | 0.259 ms | 0.270 ms | 140,996x |
-| Gradient boosting on the same features | 2.5 ms | 2.5 ms | 2.6 ms | 14,454x |
-| Closed form + CueNet residual (ONNX Runtime) | 0.584 ms | 0.571 ms | 0.593 ms | 63,032x |
-| CueNet forward pass only, batch of 1024 (per shot) | 0.6 us | 0.6 us | 0.7 us | — |
+| Numerical simulator, 16-ball rack | 4.6 s | 4.6 s | 4.6 s | — |
+| Numerical simulator, cue + object ball | 337.9 ms | 337.8 ms | 338.7 ms | 14x |
+| Closed-form solver (no ML) | 0.266 ms | 0.264 ms | 0.275 ms | 17,290x |
+| Gradient boosting on the same features | 2.6 ms | 2.6 ms | 2.8 ms | 1,744x |
+| Closed form + CueNet residual (ONNX Runtime) | 0.602 ms | 0.572 ms | 0.590 ms | 7,638x |
+| CueNet forward pass only, batch of 1024 (per shot) | 1.6 us | 0.8 us | 4.7 us | — |
 
 ## Accuracy on held-out shots
 
@@ -22,9 +22,9 @@ Regenerate with `python scripts/benchmark.py`. Single CPU core, no GPU.
 
 | Model | Mean error | p95 | Cue ball | Object ball | R² |
 |---|---:|---:|---:|---:|---:|
-| Closed form (no fitting) | 494 mm | 1780 mm | 730 mm | 258 mm | 0.013 |
-| Gradient boosting on raw features | 385 mm | 1188 mm | 523 mm | 248 mm | 0.514 |
-| Closed form + CueNet residual | 378 mm | 1336 mm | 517 mm | 239 mm | 0.423 |
+| Closed form (no fitting) | 494 mm | 1778 mm | 730 mm | 258 mm | 0.013 |
+| Gradient boosting on raw features | 382 mm | 1163 mm | 516 mm | 249 mm | 0.521 |
+| Closed form + CueNet residual | 376 mm | 1293 mm | 516 mm | 236 mm | 0.431 |
 
 ## Where prediction stops working
 
@@ -32,10 +32,10 @@ Resting position is a smooth function of the shot until the ball starts ricochet
 
 | Cushion contacts | Shots | Closed form | Gradient boosting | CueNet residual |
 |---|---:|---:|---:|---:|
-| 0 | 414 | 114 | 160 | 97 |
-| 1 | 650 | 225 | 223 | 193 |
-| 2 | 875 | 370 | 291 | 288 |
-| 3+ | 2061 | 708 | 522 | 531 |
+| 0 | 414 | 114 | 162 | 98 |
+| 1 | 650 | 225 | 222 | 187 |
+| 2 | 876 | 371 | 289 | 281 |
+| 3+ | 2060 | 708 | 517 | 532 |
 
 ## Reading the object-ball number honestly
 
@@ -43,8 +43,8 @@ Only about a third of sampled shots actually hit the object ball. For the rest i
 
 | Ball-ball contact | Shots | Share | Closed form cue / object | Gradient boosting cue / object | CueNet cue / object |
 |---|---:|---:|---:|---:|---:|
-| no | 2704 | 67.6% | 585 / 0 | 468 / 76 | 411 / 18 |
-| yes | 1296 | 32.4% | 1032 / 797 | 638 / 606 | 738 / 701 |
+| no | 2705 | 67.6% | 585 / 0 | 457 / 77 | 411 / 16 |
+| yes | 1295 | 32.4% | 1033 / 798 | 638 / 610 | 736 / 696 |
 
 ## Feature ablation
 
@@ -52,8 +52,8 @@ Same architecture, epochs, seed and split; the ablated model sees only raw shot 
 
 | CueNet inputs | All shots | Direct shots (no cushion) |
 |---|---:|---:|
-| Raw shot parameters only | 473 mm | 173 mm |
-| Plus closed-form output | 378 mm | 97 mm |
+| Raw shot parameters only | 469 mm | 179 mm |
+| Plus closed-form output | 376 mm | 98 mm |
 | _closed form alone, for reference_ | 494 mm | 114 mm |
 
 ## Knowing which predictions to trust
@@ -62,8 +62,8 @@ The cushion-contact breakdown above slices by what the simulator did, which is o
 
 | Expected cushions | Shots answered | Coverage | Closed form | Gradient boosting | CueNet residual |
 |---|---:|---:|---:|---:|---:|
-| ≤ 0 | 390 | 9.8% | 113 mm | 158 mm | 100 mm |
-| ≤ 1 | 1098 | 27.5% | 240 mm | 220 mm | 189 mm |
-| ≤ 2 | 2002 | 50.0% | 334 mm | 266 mm | 253 mm |
-| ≤ 3 | 2748 | 68.7% | 401 mm | 316 mm | 306 mm |
-| no gate | 4000 | 100.0% | 494 mm | 385 mm | 378 mm |
+| ≤ 0 | 390 | 9.8% | 113 mm | 160 mm | 100 mm |
+| ≤ 1 | 1098 | 27.5% | 240 mm | 221 mm | 189 mm |
+| ≤ 2 | 2002 | 50.0% | 334 mm | 265 mm | 251 mm |
+| ≤ 3 | 2748 | 68.7% | 401 mm | 314 mm | 303 mm |
+| no gate | 4000 | 100.0% | 494 mm | 382 mm | 376 mm |
