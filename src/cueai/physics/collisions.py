@@ -25,24 +25,31 @@ def resolve_ball_ball(a: Ball, b: Ball, table: TableParams) -> tuple[Ball, Ball]
 
     Includes relative-velocity-dependent friction and contact-point ω coupling.
     """
-    a, b = a.copy(), b.copy()
     if a.pocketed or b.pocketed:
         return a, b
 
     delta = b.pos - a.pos
-    dist = float(np.linalg.norm(delta))
+    dist = float(np.hypot(delta[0], delta[1]))
     min_dist = a.R + b.R
-    if dist < 1e-12:
-        return a, b
-    if dist > min_dist + 2e-4:
+    if dist < 1e-12 or dist > min_dist + 2e-4:
         return a, b
 
     n = delta / dist
     overlap = min_dist - dist
+    # Angular velocity contributes nothing along n, because ω × (R n) ⊥ n, so the
+    # approach speed can be tested before doing any of the impulse work. Balls
+    # resting in contact — most pairs in a packed rack, every step — stop here.
+    v_n = float((a.vel - b.vel) @ n)
+    if v_n <= 1e-6 and overlap <= 0:
+        return a, b
+
+    a, b = a.copy(), b.copy()
     if overlap > 0:
         # Mass-proportional separation (equal mass → half/half)
         a.pos = a.pos - 0.5 * overlap * n
         b.pos = b.pos + 0.5 * overlap * n
+    if v_n <= 1e-6:
+        return a, b  # separating or resting: positional correction only
 
     ra = a.R * np.array([n[0], n[1], 0.0])
     rb = -b.R * np.array([n[0], n[1], 0.0])
@@ -52,11 +59,8 @@ def resolve_ball_ball(a: Ball, b: Ball, table: TableParams) -> tuple[Ball, Ball]
     vb3 = np.array([b.vel[0], b.vel[1], 0.0])
     v_rel = (va3 - vb3) + np.cross(wa, ra) - np.cross(wb, rb)
 
-    v_n = float(np.dot(v_rel[:2], n))
-    # n points a→b; approaching when (va−vb)·n > 0
-    if v_n <= 1e-6:
-        return a, b  # separating or resting
-
+    # v_n was already established above from the linear velocities; the spin terms
+    # in v_rel are tangential and only matter for the friction impulse below.
     e = table.e_ball
     # Slightly softer at high speed (energy loss grows)
     speed_n = abs(v_n)
@@ -193,19 +197,23 @@ def resolve_all_ball_collisions(
     n = len(balls)
     for _ in range(passes):
         any_hit = False
+        # Candidate search is vectorised: with 16 balls this runs every time step,
+        # so the pairwise distances are one numpy call rather than 120 Python ones.
+        active = [i for i in range(n) if not balls[i].pocketed]
+        if len(active) < 2:
+            break
+        positions = np.array([balls[i].pos for i in active])
+        radii = np.array([balls[i].R for i in active])
+        gaps = (
+            np.linalg.norm(positions[:, None, :] - positions[None, :, :], axis=2)
+            - radii[:, None]
+            - radii[None, :]
+        )
+        rows, cols = np.nonzero(np.triu(gaps <= 1e-4, k=1))
         # Process deepest overlaps first for stability
-        pairs: list[tuple[float, int, int]] = []
-        for i in range(n):
-            if balls[i].pocketed:
-                continue
-            for j in range(i + 1, n):
-                if balls[j].pocketed:
-                    continue
-                d = float(np.linalg.norm(balls[i].pos - balls[j].pos))
-                min_d = balls[i].R + balls[j].R
-                if d <= min_d + 1e-4:
-                    pairs.append((d - min_d, i, j))
-        pairs.sort()  # most overlapped first
+        pairs = sorted(
+            (float(gaps[r, c]), active[r], active[c]) for r, c in zip(rows, cols)
+        )
         for _, i, j in pairs:
             bi, bj = resolve_ball_ball(balls[i], balls[j], table)
             if not np.allclose(bi.vel, balls[i].vel) or not np.allclose(bj.vel, balls[j].vel):

@@ -20,11 +20,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from cueai.ml.features import FEATURE_NAMES, build_features
 from cueai.ml.model import CueNet
 from cueai.physics.analytic import predict_endpoint
 from cueai.physics.ball import Ball
 from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.simulator import FEATURE_NAMES, Simulator, shot_feature_vector
+from cueai.physics.simulator import Simulator
 
 
 class TrajectoryPredictor:
@@ -46,7 +47,7 @@ class TrajectoryPredictor:
         onnx_path = self.model_dir / "cuenet.onnx"
         if checkpoint.exists():
             data = torch.load(checkpoint, map_location="cpu", weights_only=False)
-            self.net = CueNet(in_dim=int(data["in_dim"]))
+            self.net = CueNet(in_dim=int(data["in_dim"]), hidden=int(data.get("hidden", 256)))
             self.net.load_state_dict(data["state_dict"])
             self.net.eval()
             self.mean = np.asarray(data["scaler_mean"], dtype=np.float32)
@@ -74,16 +75,17 @@ class TrajectoryPredictor:
 
     # --------------------------------------------------------------- prediction
 
-    @staticmethod
     def feature_vector(
+        self,
         shot: ShotParams,
         cue_pos: tuple[float, float] | np.ndarray,
         obj_pos: tuple[float, float] | np.ndarray | None,
         table: TableParams,
     ) -> np.ndarray:
-        cue = np.asarray(cue_pos, dtype=np.float64)
-        obj = np.asarray(obj_pos, dtype=np.float64) if obj_pos is not None else None
-        return shot_feature_vector(shot, cue, obj, table)
+        """Identical construction to training; see :mod:`cueai.ml.features`."""
+        return build_features(
+            shot, cue_pos, obj_pos, table, radius=self.sim.ball_params.radius
+        )
 
     def _standardise(self, features: np.ndarray) -> np.ndarray:
         if self.mean is None or self.scale is None:
