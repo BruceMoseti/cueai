@@ -102,6 +102,23 @@ async function main() {
     }
 
     console.log(`page loaded and painted (${painted.width}x${painted.height} device pixels)`);
+
+    // The README and the page nav send people to #play expecting to land on the
+    // table. That is one attribute away from silently scrolling nowhere.
+    const anchors = await page.evaluate(() => {
+      const local = [...document.querySelectorAll("a[href^='#']")].map((a) => a.getAttribute("href"));
+      return {
+        broken: local.filter((href) => !document.querySelector(href)),
+        playIsTheTable: document.getElementById("play")?.contains(document.getElementById("table")),
+      };
+    });
+    if (anchors.broken.length) {
+      throw new Error(`links to nothing: ${anchors.broken.join(", ")}`);
+    }
+    if (!anchors.playIsTheTable) {
+      throw new Error("#play does not contain the table, so the play link lands somewhere else");
+    }
+    console.log("every in-page link resolves, and #play is the table");
     for (let game = 0; game < games; game++) {
       if (game > 0) await page.evaluate(() => window.pocket.newGame());
       const result = await playGame(page, shotLimit, verbose);
