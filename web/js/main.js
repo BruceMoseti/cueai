@@ -20,13 +20,23 @@ import {
 } from "./game.js";
 import { chooseShot, choosePlacement, DIFFICULTIES } from "./bot.js";
 import { Renderer, drawSpinWidget } from "./render.js";
-import { Inspector, trackPeak } from "./inspector.js";
+import { Inspector } from "./inspector.js";
 import { firstContact } from "./aim.js";
 import { BALL_COLORS, suitOf } from "./rack.js";
+import { loadFacts } from "./facts.js";
 
 const PHYS_DT = 0.001;
 const MAX_CUE_SPEED = 7.5; // m/s at full power, a hard break
-const MAX_SUBSTEPS = 90; // ceiling so a stalled tab cannot spiral
+// Enough headroom for 3x playback on a 30 Hz display; past that the frame is
+// late anyway and catching up fully would make it later.
+const MAX_SUBSTEPS = 170;
+// Every shot now reaches rest well inside this, but a turn that never ends is
+// an unrecoverable game rather than a visible glitch, so the loop is bounded.
+const MAX_SHOT_SECONDS = 20;
+const STROKE_MS = 200; // backswing and delivery, before the ball is struck
+const DROP_MS = 260; // a potted ball falling out of sight
+const DRAG_DEADZONE = 0.012; // metres of pull-back that count as drawing the cue
+const CLICK_HOLD_MS = 220; // a press held this long on the spot is a shot, not a nudge
 
 const el = (id) => document.getElementById(id);
 const ui = {
@@ -66,7 +76,7 @@ const inspector = new Inspector({
 });
 
 let state;
-let mode; // "placing" | "aim" | "rolling" | "thinking" | "over"
+let mode; // "placing" | "aim" | "stroking" | "rolling" | "thinking" | "over"
 let aimAngle = 0;
 let power = 0.42;
 let spin = { x: 0, y: 0 };
@@ -77,16 +87,34 @@ let shotContext = null;
 let tableTime = 0;
 let lastFrame = performance.now();
 let messageHtml = "";
+let history = [];
+// Table time owed from the previous frame. Rounding the substep count instead
+// would make the playback speed a function of the frame rate, which shows up
+// as the balls surging whenever the browser misses a frame.
+let physDebt = 0;
+let stroke = null; // { shot, startedAt } while the cue is being delivered
+let drops = []; // potted balls, still falling for the eye's benefit
+let botAimPreview = false; // show the bot's line between deciding and striking
+// The bot's turn spans several awaits. Starting a new game in the middle of
+// one has to invalidate it, or the old turn wakes up and shoots on the new
+// table.
+let generation = 0;
 
 // ---------- lifecycle ----------
 
 function newGame() {
+  generation++;
   state = createGame();
   mode = "placing";
   aimAngle = 0;
   spin = { x: 0, y: 0 };
   shotEvents = null;
   tableTime = 0;
+  history = [];
+  physDebt = 0;
+  stroke = null;
+  drops = [];
+  botAimPreview = false;
   inspector.reset();
   messageHtml = "Ball in hand behind the head string. Click to place the cue ball, then break.";
   ui.banner.classList.remove("show");
@@ -103,15 +131,41 @@ function cueBall() {
 
 // ---------- shooting ----------
 
+/**
+ * Draw the cue back and deliver it, then hand over to the physics.
+ *
+ * The stroke is animation only — the shot handed to the simulator is the one
+ * that was chosen before it started — but a ball that leaps off a stationary
+ * cue reads as a state change rather than as a stroke.
+ */
+function beginStroke(shot) {
+  const cue = cueBall();
+  if (!cue || cue.pocketed) return;
+  stroke = { shot, startedAt: performance.now() };
+  mode = "stroking";
+  syncUI();
+}
+
+/** Backswing, then accelerate into the ball. 1 is at rest, 0 is contact. */
+function strokeOffset(p) {
+  const BACKSWING = 0.3;
+  if (p < 0.36) return 1 + BACKSWING * (p / 0.36);
+  const q = (p - 0.36) / 0.64;
+  return (1 + BACKSWING) * (1 - q * q);
+}
+
 function beginShot(shot) {
   const cue = cueBall();
   if (!cue || cue.pocketed) return;
   shotContext = {
     wasBreak: state.phase === "break",
     clearedBefore: groupCleared(state, state.turn),
+    shooter: state.turn,
   };
   shotEvents = newEvents();
   tableTime = 0;
+  physDebt = 0;
+  botAimPreview = false;
   inspector.beginShot(shot.speed);
   applyShot(cue, shot);
   mode = "rolling";
@@ -120,7 +174,7 @@ function beginShot(shot) {
 
 function playerShoot() {
   if (mode !== "aim") return;
-  beginShot({
+  beginStroke({
     speed: Math.max(0.35, power * MAX_CUE_SPEED),
     angle: aimAngle,
     englishX: spin.x,
@@ -131,6 +185,16 @@ function playerShoot() {
 function finishShot() {
   const outcome = resolveShot(state, shotEvents, shotContext);
   messageHtml = describeOutcome(outcome, shotContext);
+  history.push({
+    shooter: shotContext.shooter,
+    wasBreak: shotContext.wasBreak,
+    potted: [...outcome.potted],
+    foul: outcome.foul,
+    fouls: [...outcome.fouls],
+    continues: outcome.continues,
+    cushions: shotEvents.cushions,
+    firstContact: shotEvents.firstContact,
+  });
 
   if (state.phase === "over") {
     mode = "over";
@@ -185,43 +249,70 @@ function showBanner() {
 // ---------- the opponent ----------
 
 async function startBotTurn() {
+  const era = generation;
+  const stale = () => era !== generation;
+
   mode = "thinking";
   syncUI();
-  await new Promise((r) => setTimeout(r, 260)); // a beat, so the turn reads
+  await pause(260); // a beat, so the change of turn reads
+  if (stale()) return;
 
   if (state.ballInHand) {
     const spot = choosePlacement(state);
     placeCue(state, spot.x, spot.y);
     state.ballInHand = false;
     syncUI();
-    await new Promise((r) => setTimeout(r, 220));
+    await pause(220);
+    if (stale()) return;
   }
 
-  const decision = await chooseShot(state, {
-    difficulty: ui.difficulty.value,
-    onProgress: (done, total) => {
-      ui.botProgress.style.width = `${Math.round((done / total) * 100)}%`;
-    },
-  });
+  let decision;
+  try {
+    decision = await chooseShot(state, {
+      difficulty: ui.difficulty.value,
+      onProgress: (done, total) => {
+        if (!stale()) ui.botProgress.style.width = `${Math.round((done / total) * 100)}%`;
+      },
+    });
+  } catch (error) {
+    // Never strand the turn: concede rather than leave the table frozen.
+    console.error("the bot failed to choose a shot", error);
+    decision = { shot: { speed: 1.2, angle: aimAngle, englishX: 0, englishY: 0 }, plan: { kind: "hopeless" }, stats: {} };
+  }
+  if (stale()) return;
 
   ui.botProgress.style.width = "100%";
   ui.botReport.innerHTML = reportBotDecision(decision);
   aimAngle = decision.shot.angle;
-  await new Promise((r) => setTimeout(r, 420)); // let the cue line be seen
+  botAimPreview = true;
+  await pause(420); // let the chosen line be seen before the cue moves
+  if (stale()) {
+    botAimPreview = false;
+    return;
+  }
+
   ui.botProgress.style.width = "0%";
-  beginShot(decision.shot);
+  beginStroke(decision.shot);
+}
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function reportBotDecision(decision) {
   const { plan, stats } = decision;
   if (plan.kind === "break") {
-    return `<b>Break.</b> No search: the opening shot has nothing to choose between.`;
+    return "<b>Break.</b> No search: the opening shot has nothing to choose between.";
   }
-  const lines = [
-    `<b>${stats.candidates}</b> pots solved in closed form, ` +
-      `<b>${stats.rollouts}</b> simulated (${stats.tableSeconds.toFixed(1)} s of table time ` +
-      `in ${Math.round(stats.elapsedMs)} ms).`,
-  ];
+
+  const lines = [];
+  if (stats.rollouts) {
+    lines.push(
+      `<b>${stats.candidates}</b> pots solved in closed form, ` +
+        `<b>${stats.rollouts}</b> simulated (${stats.tableSeconds.toFixed(1)} s of table time ` +
+        `in ${Math.round(stats.elapsedMs)} ms).`
+    );
+  }
   if (plan.kind === "pot") {
     lines.push(
       `Chose the <b>${plan.target}</b>, cut <b>${((plan.cut * 180) / Math.PI).toFixed(0)}°</b>.`
@@ -229,12 +320,14 @@ function reportBotDecision(decision) {
   } else if (plan.kind === "safety") {
     lines.push(`Nothing pottable. Playing safe off the <b>${plan.target}</b>.`);
   } else {
-    lines.push("No legal target could be reached.");
+    lines.push("No legal target could be reached from here.");
   }
-  lines.push(
-    `Stroke error <b>${plan.aimErrorDeg >= 0 ? "+" : ""}${plan.aimErrorDeg.toFixed(2)}°</b> ` +
-      `(${DIFFICULTIES[ui.difficulty.value].label}).`
-  );
+  if (Number.isFinite(plan.aimErrorDeg)) {
+    lines.push(
+      `Stroke error <b>${plan.aimErrorDeg >= 0 ? "+" : ""}${plan.aimErrorDeg.toFixed(2)}°</b> ` +
+        `(${DIFFICULTIES[ui.difficulty.value].label}).`
+    );
+  }
   return lines.join("<br>");
 }
 
@@ -281,12 +374,15 @@ ui.canvas.addEventListener("pointermove", (event) => {
       aimAngle = target;
     }
   } else if (drag) {
-    const cue = cueBall();
-    const back = -((pointerTable[0] - drag.x) * Math.cos(aimAngle) + (pointerTable[1] - drag.y) * Math.sin(aimAngle));
-    power = Math.max(0.06, Math.min(1, back / 0.42));
-    ui.power.value = String(power);
-    updatePowerReadout();
-    void cue;
+    const back =
+      -((pointerTable[0] - drag.x) * Math.cos(aimAngle) +
+        (pointerTable[1] - drag.y) * Math.sin(aimAngle));
+    if (back > DRAG_DEADZONE) drag.pulled = true;
+    if (drag.pulled) {
+      power = Math.max(0.06, Math.min(1, back / 0.42));
+      ui.power.value = String(power);
+      updatePowerReadout();
+    }
   }
 });
 
@@ -306,15 +402,22 @@ ui.canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  if (mode === "aim") drag = { x, y };
+  if (mode === "aim") drag = { x, y, pulled: false, at: performance.now() };
 });
 
 ui.canvas.addEventListener("pointerup", (event) => {
   if (mode === "aim" && drag) {
+    // A shot costs a turn, so it takes a deliberate gesture: draw the cue back,
+    // or hold still on the ball. A quick click is someone lining the shot up.
+    const deliberate = drag.pulled || performance.now() - drag.at > CLICK_HOLD_MS;
     drag = null;
-    playerShoot();
+    if (deliberate) playerShoot();
   }
   void event;
+});
+
+ui.canvas.addEventListener("pointercancel", () => {
+  drag = null;
 });
 
 ui.canvas.addEventListener("pointerleave", () => {
@@ -322,6 +425,11 @@ ui.canvas.addEventListener("pointerleave", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  // The controls are real form elements; space and the arrows belong to
+  // whichever one has focus before they belong to the table.
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest("input, select, button, textarea")) return;
+
   if (event.key === " " || event.key === "Enter") {
     event.preventDefault();
     playerShoot();
@@ -392,9 +500,38 @@ window.addEventListener("resize", () => renderer.resize(state.table));
 
 // ---------- per-frame ----------
 
+/**
+ * Note balls that have just been pocketed.
+ *
+ * The simulator flags a ball and stops drawing it, which between two frames
+ * looks like the ball being deleted rather than falling in. Recording where it
+ * went lets the renderer finish the motion.
+ */
+function collectDrops() {
+  for (const b of state.balls) {
+    if (!b.pocketed) {
+      b.dropped = false;
+      continue;
+    }
+    if (b.dropped) continue;
+    b.dropped = true;
+    drops.push({ number: b.number, x: b.x, y: b.y, at: performance.now() });
+  }
+}
+
 function advancePhysics(elapsedSeconds) {
   const scale = Number(ui.playback.value);
-  const substeps = Math.min(MAX_SUBSTEPS, Math.round((elapsedSeconds * scale) / PHYS_DT));
+  physDebt += elapsedSeconds * scale;
+  let substeps = Math.floor(physDebt / PHYS_DT);
+  if (substeps > MAX_SUBSTEPS) {
+    // A backgrounded tab hands back a delta measured in seconds. Abandoning
+    // the backlog costs a jump; paying it off costs a freeze and then a jump.
+    substeps = MAX_SUBSTEPS;
+    physDebt = 0;
+  } else {
+    physDebt -= substeps * PHYS_DT;
+  }
+
   const cue = cueBall();
   for (let i = 0; i < substeps; i++) {
     stepWorld(state.balls, state.table, PHYS_DT, shotEvents);
@@ -402,10 +539,19 @@ function advancePhysics(elapsedSeconds) {
     for (const b of state.balls) {
       if (!b.pocketed) b.visualSpin = (b.visualSpin ?? 0) + b.wz * PHYS_DT;
     }
+    collectDrops();
+    // Sampled inside the loop, not once a frame: the inspector thins the trace
+    // by table time so what it plots does not depend on the frame rate.
+    inspector.sample(cue, tableTime, shotEvents.collisions, shotEvents.cushions);
     if (!anyBallMoving(state.balls)) break;
   }
-  trackPeak(inspector, cue);
-  inspector.sample(cue, tableTime);
+
+  if (tableTime > MAX_SHOT_SECONDS && anyBallMoving(state.balls)) {
+    console.warn(`shot still moving after ${MAX_SHOT_SECONDS}s of table time; forcing rest`);
+    for (const b of state.balls) {
+      b.vx = b.vy = b.wx = b.wy = b.wz = 0;
+    }
+  }
   if (!anyBallMoving(state.balls)) finishShot();
 }
 
@@ -413,15 +559,38 @@ function frame(now) {
   const elapsed = Math.min((now - lastFrame) / 1000, 0.05);
   lastFrame = now;
 
+  let strokeGap = 1;
+  if (mode === "stroking") {
+    const p = (now - stroke.startedAt) / STROKE_MS;
+    if (p >= 1) {
+      const shot = stroke.shot;
+      stroke = null;
+      beginShot(shot);
+    } else {
+      strokeGap = strokeOffset(p);
+    }
+  }
+
   if (mode === "rolling") advancePhysics(elapsed);
+  if (drops.length) drops = drops.filter((d) => now - d.at < DROP_MS);
 
   const cue = cueBall();
-  const aim = mode === "aim" ? currentAim() : null;
+  // The bot's chosen line is worth showing during the beat before it strokes:
+  // it is the search's answer, and it is the only moment you can read it.
+  const aiming = mode === "aim" || mode === "stroking" || botAimPreview;
+  const aim = aiming ? currentAim() : null;
   let tangentSide = 1;
   if (aim?.hit) {
     const dot = Math.cos(aimAngle) * aim.tangentDir[0] + Math.sin(aimAngle) * aim.tangentDir[1];
     tangentSide = dot >= 0 ? 1 : -1;
   }
+
+  // Ringing every ball on an open table says nothing, so the markers only
+  // appear once the legal set is genuinely narrower than what is on the cloth.
+  const yourTurn = (aiming || mode === "placing") && state.turn === YOU;
+  const legal = yourTurn ? legalTargets(state, YOU) : [];
+  const onTable = state.balls.filter((b) => !b.pocketed && b.number !== 0).length;
+  const restricted = yourTurn && legal.length > 0 && legal.length < onTable;
 
   let ghostCue = null;
   if (mode === "placing" && pointerTable) {
@@ -436,14 +605,14 @@ function frame(now) {
     spin,
     tangentSide,
     ghostCue,
-    showAim: ui.showAim.checked && mode === "aim",
-    showCue: mode === "aim",
-    showTargets: ui.showTargets.checked,
+    drops,
+    dropAge: (d) => (now - d.at) / DROP_MS,
+    strokeGap,
+    showAim: ui.showAim.checked && aiming,
+    showCue: aiming,
+    showTargets: ui.showTargets.checked && restricted,
     footSpot: true,
-    highlight:
-      mode === "aim" || mode === "placing"
-        ? new Set(legalTargets(state, YOU).map((b) => b.number))
-        : null,
+    highlight: restricted ? new Set(legal.map((b) => b.number)) : null,
   });
 
   inspector.update(cue, {
@@ -510,7 +679,41 @@ function syncUI() {
 
 // ---------- start ----------
 
+// Test seam. `web/test/browser.mjs` drives a real Chrome through this rather
+// than through synthetic mouse maths, so the end-to-end test exercises the
+// same functions the buttons call.
+window.cueai = {
+  get state() {
+    return state;
+  },
+  get mode() {
+    return mode;
+  },
+  get history() {
+    return history;
+  },
+  shoot: playerShoot,
+  newGame,
+  place(x, y) {
+    const [px, py] = nearestLegalCue(state, x, y);
+    placeCue(state, px, py);
+    state.ballInHand = false;
+    mode = "aim";
+    aimAtNearestTarget();
+    syncUI();
+  },
+  aim(angle) {
+    aimAngle = angle;
+  },
+  setPower(value) {
+    power = value;
+    ui.power.value = String(value);
+    updatePowerReadout();
+  },
+};
+
 newGame();
 renderer.resize(state.table);
 updatePowerReadout();
 requestAnimationFrame(frame);
+void loadFacts();

@@ -42,6 +42,10 @@ const MAX_CUT = (78 * Math.PI) / 180;
 // quarter as much, which buys four times the candidates.
 const SEARCH_DT = 0.004;
 const SEARCH_MAX_TIME = 9.0;
+// Hand the event loop back whenever the search has held it this long. Yielding
+// on a fixed candidate count instead ties the frame rate to how expensive a
+// rollout happens to be, which is exactly the thing that varies.
+const SLICE_MS = 8;
 
 function yieldToUI() {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -238,6 +242,7 @@ export async function chooseShot(state, { difficulty = "club", onProgress = null
   }
 
   let best = null;
+  let sliceStarted = started;
   const considered = [];
   for (let i = 0; i < trials.length; i++) {
     const trial = trials[i];
@@ -257,8 +262,11 @@ export async function chooseShot(state, { difficulty = "club", onProgress = null
       foul: result.outcome.foul,
     });
     if (!best || result.score > best.score) best = { ...result, shot, trial };
-    if (onProgress && i % 2 === 0) onProgress(i + 1, trials.length);
-    if (i % 2 === 1) await yieldToUI();
+    if (onProgress) onProgress(i + 1, trials.length);
+    if (performance.now() - sliceStarted > SLICE_MS) {
+      await yieldToUI();
+      sliceStarted = performance.now();
+    }
   }
 
   if (!best) {

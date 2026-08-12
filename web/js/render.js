@@ -61,7 +61,12 @@ export class Renderer {
       if (!b.pocketed) this.drawShadow(b);
     }
 
+    if (view.drops?.length) this.drawDrops(table, view);
+
     if (view.aim && view.showAim) this.drawAimOverlay(state, view);
+    // The cue goes under the balls: a stick painted over them reads as lying
+    // on the cloth rather than being held above it.
+    if (view.aim && view.showAim && view.showCue) this.drawCueStick(state, view);
 
     for (const b of state.balls) {
       if (b.pocketed) continue;
@@ -70,7 +75,6 @@ export class Renderer {
     }
 
     if (view.ghostCue) this.drawGhostCue(view.ghostCue);
-    if (view.aim && view.showAim && view.showCue) this.drawCueStick(state, view);
 
     ctx.restore();
   }
@@ -82,7 +86,7 @@ export class Renderer {
     const [ow, oh] = this.outerSize(table);
     const w = ow * this.scale;
     const h = oh * this.scale;
-    const r = 0.02 * this.scale * 100;
+    const r = 0.022 * this.scale; // 22 mm of rounding on the woodwork
 
     const wood = ctx.createLinearGradient(0, 0, 0, h);
     wood.addColorStop(0, "#4a3324");
@@ -239,7 +243,7 @@ export class Renderer {
       ctx.translate(cx, cy);
       ctx.rotate(spin);
       ctx.fillStyle = colour;
-      ctx.fillRect(-r, -r * 0.56, 2 * r, r * 1.12);
+      ctx.fillRect(-r, -r * 0.62, 2 * r, r * 1.24);
       ctx.restore();
     }
 
@@ -249,10 +253,10 @@ export class Renderer {
       ctx.rotate(spin);
       ctx.fillStyle = "#f7f5ee";
       ctx.beginPath();
-      ctx.arc(0, 0, r * 0.44, 0, Math.PI * 2);
+      ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#15181c";
-      ctx.font = `700 ${r * (b.number > 9 ? 0.5 : 0.62)}px ${
+      ctx.font = `700 ${r * (b.number > 9 ? 0.52 : 0.64)}px ${
         "ui-monospace, Menlo, Consolas, monospace"
       }`;
       ctx.textAlign = "center";
@@ -297,6 +301,45 @@ export class Renderer {
       ctx.arc(cx, cy, r * 1.32, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+  }
+
+  /**
+   * Balls that have just been potted, on their way out of sight.
+   *
+   * The simulator drops a ball the instant its centre is inside the pocket
+   * radius, so without this the ball is on the cloth in one frame and gone in
+   * the next, which looks like a rendering fault rather than a pot.
+   */
+  drawDrops(table, view) {
+    const ctx = this.ctx;
+    const r = BALL.radius * this.scale;
+    for (const d of view.drops) {
+      const p = Math.min(1, Math.max(0, view.dropAge(d)));
+      const fall = p * p; // gravity, near enough for a quarter of a second
+      const pocket = nearestPocket(table, d.x, d.y);
+      const [cx, cy] = this.toCanvas(
+        d.x + (pocket[0] - d.x) * fall,
+        d.y + (pocket[1] - d.y) * fall
+      );
+      const radius = r * (1 - 0.75 * fall);
+      const stripe = suitOf(d.number) === "stripe";
+
+      ctx.save();
+      ctx.globalAlpha = 1 - 0.9 * fall;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = stripe ? "#f4f2e9" : BALL_COLORS[d.number];
+      ctx.fillRect(cx - radius, cy - radius, 2 * radius, 2 * radius);
+      if (stripe) {
+        ctx.fillStyle = BALL_COLORS[d.number];
+        ctx.fillRect(cx - radius, cy - radius * 0.62, 2 * radius, radius * 1.24);
+      }
+      // Darkens as it sinks below the rim.
+      ctx.fillStyle = `rgba(0,0,0,${0.6 * fall})`;
+      ctx.fillRect(cx - radius, cy - radius, 2 * radius, 2 * radius);
+      ctx.restore();
     }
   }
 
@@ -381,9 +424,15 @@ export class Renderer {
     const [cx, cy] = this.toCanvas(cue.x, cue.y);
     const angle = view.angle;
     // Pull back with power, and add the tip offset so the stick visibly aims
-    // at the part of the ball the spin controls select.
-    const gap = r * (1.25 + 3.4 * view.power);
-    const length = 1.45 * this.scale;
+    // at the part of the ball the spin controls select. During the stroke the
+    // caller drives this from its rest position down to the tip touching.
+    const rest = 1.25 + 3.4 * view.power;
+    const contact = 1.02;
+    const gap = r * (contact + (rest - contact) * (view.strokeGap ?? 1));
+    // A real cue is 1.45 m, which drawn to scale reaches across the table and
+    // hides the balls behind it. Three quarters of a metre reads as a cue
+    // without obscuring the shot.
+    const length = 0.75 * this.scale;
     const perp = -view.spin.x * r * 0.85;
 
     ctx.save();
@@ -433,6 +482,12 @@ export class Renderer {
 
     ctx.restore();
   }
+}
+
+function nearestPocket(table, x, y) {
+  return table.pockets.reduce((best, p) =>
+    Math.hypot(p[0] - x, p[1] - y) < Math.hypot(best[0] - x, best[1] - y) ? p : best
+  );
 }
 
 function roundRect(ctx, x, y, w, h, r) {
