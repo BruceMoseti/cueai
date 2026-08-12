@@ -430,8 +430,8 @@ def test_the_contact_band_is_far_from_both_things_that_could_swallow_it() -> Non
     and real contacts are missed, too loose and balls collide with thin air.
     """
     noise = 1e-15  # the scale of rounding in a position, in metres
-    assert CONTACT_BAND > 1000 * noise
-    assert CONTACT_BAND < BallParams().radius / 1000
+    assert CONTACT_BAND / noise > 1000
+    assert BallParams().radius / CONTACT_BAND > 1000
 
 
 def test_resolving_a_resting_rack_changes_nothing_and_stops_immediately() -> None:

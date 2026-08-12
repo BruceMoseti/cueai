@@ -64,7 +64,7 @@ def scatter_layout(
             continue
         placed.append(candidate)
 
-    numbers = [0] + list(rng.choice(np.arange(1, 16), size=n_objects, replace=False))
+    numbers = [0, *rng.choice(np.arange(1, 16), size=n_objects, replace=False)]
     return [make_ball(int(n), pos, params) for n, pos in zip(numbers, placed)]
 
 
@@ -106,7 +106,8 @@ def chaos_yardstick(sim: Simulator, balls: list[Ball], shot: ShotParams, referen
     for number, pos in reference["resting"].items():
         if number not in other["resting"]:
             return float("inf")  # a ball changed pocketed status: fully chaotic
-        moved = float(np.hypot(pos[0] - other["resting"][number][0], pos[1] - other["resting"][number][1]))
+        elsewhere = other["resting"][number]
+        moved = float(np.hypot(pos[0] - elsewhere[0], pos[1] - elsewhere[1]))
         worst = max(worst, moved)
     if reference["pocketed"] != other["pocketed"]:
         return float("inf")
@@ -243,13 +244,72 @@ def build_cases(seed: int) -> list[dict]:
     return cases
 
 
+def physics_only(case: dict) -> dict:
+    """The reproducible part of a case, with wall-clock timings dropped."""
+    return {
+        "name": case["name"],
+        "balls": case["balls"],
+        "shot": case["shot"],
+        "pocketed": case["reference"]["pocketed"],
+        "resting": case["reference"]["resting"],
+    }
+
+
+def check_against(path: Path, cases: list[dict]) -> int:
+    """
+    Verify the committed cases still describe what the simulator does.
+
+    Timings vary run to run, so comparing the files byte for byte would fail
+    for no reason; only the physics is compared.
+    """
+    if not path.exists():
+        print(f"{path} does not exist; run without --check to create it")
+        return 1
+
+    committed = {c["name"]: physics_only(c) for c in json.loads(path.read_text())["cases"]}
+    fresh = {c["name"]: physics_only(c) for c in cases}
+
+    if committed.keys() != fresh.keys():
+        print(f"case list changed: {sorted(set(fresh) ^ set(committed))}")
+        return 1
+
+    worst = 0.0
+    worst_name = ""
+    for name, current in fresh.items():
+        old = committed[name]
+        if old["pocketed"] != current["pocketed"]:
+            print(f"{name}: pocketed {old['pocketed']} but now pockets {current['pocketed']}")
+            return 1
+        for number, pos in current["resting"].items():
+            before = old["resting"][number]
+            moved = float(np.hypot(pos[0] - before[0], pos[1] - before[1]))
+            if moved > worst:
+                worst, worst_name = moved, f"{name} ball {number}"
+
+    if worst > 1e-6:
+        print(f"committed cases are stale: {worst * 1000:.4f} mm drift on {worst_name}")
+        print("run `make parity` and commit web/test/parity_cases.json")
+        return 1
+    print(f"committed cases match the simulator (worst drift {worst * 1000:.2e} mm)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("web/test/parity_cases.json"))
     parser.add_argument("--seed", type=int, default=11)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="compare against the committed cases instead of rewriting them",
+    )
     args = parser.parse_args(argv)
 
     cases = build_cases(args.seed)
+
+    if args.check:
+        raise SystemExit(check_against(args.out, cases))
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "dt": 0.001,

@@ -17,6 +17,6 @@ data/processed/
 .cppbuild/
 
 # Puppeteer, installed on demand by web/test/browser.mjs
-node_modules/
+node_modules
 package-lock.json
 docs/assets/.frames/
