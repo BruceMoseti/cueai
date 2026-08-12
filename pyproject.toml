@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cueai"
+name = "pocket-physics"
 version = "0.3.0"
 description = "Physics-informed billiards simulation with a learned fast surrogate"
 readme = "README.md"
@@ -36,9 +36,9 @@ dev = [
 ]
 
 [project.scripts]
-cueai-ui = "cueai.ui.app:main"
-cueai-train = "cueai.ml.train:main"
-cueai-api = "cueai.api.main:run"
+pocket-ui = "pocket.ui.app:main"
+pocket-train = "pocket.ml.train:main"
+pocket-api = "pocket.api.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -70,7 +70,7 @@ ignore = [
 # No python_version pin: mypy targets whichever interpreter runs it, so each entry
 # in the CI matrix checks its own version against the numpy stubs built for it.
 # Ruff's py310 target is what holds the floor for our own syntax.
-files = ["src/cueai"]
+files = ["src/pocket"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true

@@ -1,5 +1,5 @@
 """ML package."""
 
-from cueai.ml.infer import TrajectoryPredictor
+from pocket.ml.infer import TrajectoryPredictor
 
 __all__ = ["TrajectoryPredictor"]

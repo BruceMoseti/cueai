@@ -1,4 +1,4 @@
-# CueAI
+# Pocket Physics
 
 [![CI](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml/badge.svg)](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
@@ -40,7 +40,7 @@ found afterwards, and which of those facts made a shot a foul.
 ![The whole interface: table, live cue-ball trace, the bot's report and the shot log](docs/assets/web_game.png)
 
 The browser is not running a lookalike physics engine. `web/js/physics.js` is a
-hand port of `src/cueai/physics/`, and the port is measured rather than
+hand port of `src/pocket/physics/`, and the port is measured rather than
 asserted: `scripts/export_parity_cases.py` runs 35 shots through the Python
 simulator — draw, follow, english off two rails, thin cuts, clusters and full
 sixteen-ball breaks — and `web/test/parity.mjs` replays every one of them in
@@ -406,7 +406,7 @@ parity check and a run of headless games have passed.
 ## Repository map
 
 ```
-src/cueai/
+src/pocket/
   physics/
     ball.py         four-state cloth dynamics for one ball
     collisions.py   frictional ball-ball impulses, cushions, pockets
@@ -425,7 +425,7 @@ src/cueai/
 
 web/                 the playable table: dependency-free ES modules
   js/
-    physics.js      hand port of src/cueai/physics/, checked against it
+    physics.js      hand port of src/pocket/physics/, checked against it
     rack.js         the same rack geometry, ported
     game.js         eight-ball rules, fouls, group assignment
     bot.js          closed-form candidate pots, then simulated rollouts

@@ -2,7 +2,7 @@
 """
 Export reference shots so the browser physics can be checked against Python.
 
-The Python package under `src/cueai/physics/` is the definition of correct: it
+The Python package under `src/pocket/physics/` is the definition of correct: it
 is what `tests/test_validation.py` pins to closed-form mechanics. The browser
 runs a hand port of it, and a port is only worth anything if someone measures
 the difference. This writes the initial conditions and the reference outcome
@@ -25,10 +25,10 @@ from pathlib import Path
 
 import numpy as np
 
-from cueai.physics.ball import Ball
-from cueai.physics.constants import BallParams, ShotParams, TableParams
-from cueai.physics.rack import identity_for, make_full_rack
-from cueai.physics.simulator import Simulator
+from pocket.physics.ball import Ball
+from pocket.physics.constants import BallParams, ShotParams, TableParams
+from pocket.physics.rack import identity_for, make_full_rack
+from pocket.physics.simulator import Simulator
 
 PERTURBATION_M = 1e-12
 

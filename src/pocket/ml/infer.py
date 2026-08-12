@@ -20,12 +20,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from cueai.ml.features import FEATURE_NAMES, build_features
-from cueai.ml.model import CueNet
-from cueai.physics.analytic import predict_endpoint
-from cueai.physics.ball import Ball
-from cueai.physics.constants import ShotParams, TableParams
-from cueai.physics.simulator import Simulator
+from pocket.ml.features import FEATURE_NAMES, build_features
+from pocket.ml.model import CueNet
+from pocket.physics.analytic import predict_endpoint
+from pocket.physics.ball import Ball
+from pocket.physics.constants import ShotParams, TableParams
+from pocket.physics.simulator import Simulator
 
 
 class TrajectoryPredictor:
@@ -82,7 +82,7 @@ class TrajectoryPredictor:
         obj_pos: tuple[float, float] | np.ndarray | None,
         table: TableParams,
     ) -> np.ndarray:
-        """Identical construction to training; see :mod:`cueai.ml.features`."""
+        """Identical construction to training; see :mod:`pocket.ml.features`."""
         return build_features(
             shot, cue_pos, obj_pos, table, radius=self.sim.ball_params.radius
         )

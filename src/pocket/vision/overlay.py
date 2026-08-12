@@ -9,7 +9,7 @@ try:
 except ImportError:  # pragma: no cover
     cv2 = None
 
-from cueai.physics.constants import TableParams
+from pocket.physics.constants import TableParams
 
 
 def render_trajectory_frame(

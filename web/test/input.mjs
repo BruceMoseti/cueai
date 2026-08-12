@@ -1,7 +1,7 @@
 /**
  * Drive the game with a real cursor and real keys.
  *
- * `browser.mjs` plays through `window.cueai`, which proves the modules wire
+ * `browser.mjs` plays through `window.pocket`, which proves the modules wire
  * together but skips the layer a person actually touches: pointer capture,
  * drag thresholds, which element owns the spacebar. Those are where an
  * interactive page goes wrong, and they cannot be tested by calling the
@@ -56,7 +56,7 @@ function check(name, ok, detail = "") {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function settle(page, timeout = 60000) {
-  await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.cueai.mode), {
+  await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.pocket.mode), {
     timeout,
     polling: 100,
   });
@@ -64,24 +64,24 @@ async function settle(page, timeout = 60000) {
 
 /** Put the game in a known state: cue ball placed, our turn, ready to aim. */
 async function resetToAim(page) {
-  await page.evaluate(() => window.cueai.newGame());
+  await page.evaluate(() => window.pocket.newGame());
   const spot = await page.evaluate(() => {
-    const s = window.cueai.state;
-    return window.cueai.toClient(s.table.length * 0.18, s.table.width * 0.5);
+    const s = window.pocket.state;
+    return window.pocket.toClient(s.table.length * 0.18, s.table.width * 0.5);
   });
   await page.mouse.click(spot.x, spot.y);
-  const mode = await page.evaluate(() => window.cueai.mode);
+  const mode = await page.evaluate(() => window.pocket.mode);
   if (mode !== "aim") throw new Error(`placing a cue ball by clicking left mode "${mode}"`);
 }
 
 /** Viewport pixels for a point in table metres. */
 function at(page, x, y) {
-  return page.evaluate(([tx, ty]) => window.cueai.toClient(tx, ty), [x, y]);
+  return page.evaluate(([tx, ty]) => window.pocket.toClient(tx, ty), [x, y]);
 }
 
 async function cueBall(page) {
   return page.evaluate(() => {
-    const b = window.cueai.state.balls.find((ball) => ball.number === 0);
+    const b = window.pocket.state.balls.find((ball) => ball.number === 0);
     return { x: b.x, y: b.y };
   });
 }
@@ -116,7 +116,7 @@ async function main() {
     page.on("pageerror", (error) => problems.push(`uncaught: ${error.message}`));
 
     await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
-    await page.waitForFunction(() => window.cueai !== undefined, { timeout: 10000 });
+    await page.waitForFunction(() => window.pocket !== undefined, { timeout: 10000 });
     await page.select("#playback", "3"); // the shots here are means, not ends
 
     await placingPutsTheBallWhereYouClick(page);
@@ -147,16 +147,16 @@ async function main() {
 // ---------- the checks ----------
 
 async function placingPutsTheBallWhereYouClick(page) {
-  await page.evaluate(() => window.cueai.newGame());
-  const before = await page.evaluate(() => window.cueai.mode);
+  await page.evaluate(() => window.pocket.newGame());
+  const before = await page.evaluate(() => window.pocket.mode);
   const target = await page.evaluate(() => {
-    const s = window.cueai.state;
+    const s = window.pocket.state;
     return { x: s.table.length * 0.18, y: s.table.width * 0.36 };
   });
   const spot = await at(page, target.x, target.y);
   await page.mouse.click(spot.x, spot.y);
   const cue = await cueBall(page);
-  const mode = await page.evaluate(() => window.cueai.mode);
+  const mode = await page.evaluate(() => window.pocket.mode);
   const off = Math.hypot(cue.x - target.x, cue.y - target.y);
   check(
     "clicking behind the head string places the cue ball there",
@@ -166,15 +166,15 @@ async function placingPutsTheBallWhereYouClick(page) {
 
   // In front of the head string is illegal on the break, and the page snaps
   // back to the nearest legal spot rather than silently ignoring the click.
-  await page.evaluate(() => window.cueai.newGame());
+  await page.evaluate(() => window.pocket.newGame());
   const illegal = await page.evaluate(() => {
-    const s = window.cueai.state;
+    const s = window.pocket.state;
     return { x: s.table.length * 0.8, y: s.table.width * 0.5 };
   });
   const far = await at(page, illegal.x, illegal.y);
   await page.mouse.click(far.x, far.y);
   const after = await cueBall(page);
-  const headString = await page.evaluate(() => window.cueai.state.table.length * 0.25);
+  const headString = await page.evaluate(() => window.pocket.state.table.length * 0.25);
   check(
     "an illegal placement snaps behind the head string",
     after.x <= headString + 1e-6,
@@ -185,7 +185,7 @@ async function placingPutsTheBallWhereYouClick(page) {
 async function theCueFollowsTheCursor(page) {
   await resetToAim(page);
   const cue = await cueBall(page);
-  const table = await page.evaluate(() => window.cueai.state.table);
+  const table = await page.evaluate(() => window.pocket.state.table);
 
   const targets = [
     [cue.x + 0.5, cue.y],
@@ -196,7 +196,7 @@ async function theCueFollowsTheCursor(page) {
   for (const [tx, ty] of targets) {
     const p = await at(page, Math.min(tx, table.length - 0.05), Math.max(0.05, ty));
     await page.mouse.move(p.x, p.y);
-    const angle = await page.evaluate(() => window.cueai.aimAngle);
+    const angle = await page.evaluate(() => window.pocket.aimAngle);
     const want = Math.atan2(Math.max(0.05, ty) - cue.y, Math.min(tx, table.length - 0.05) - cue.x);
     let delta = Math.abs(angle - want);
     if (delta > Math.PI) delta = 2 * Math.PI - delta;
@@ -214,7 +214,7 @@ async function shiftAimsSlowly(page) {
   const cue = await cueBall(page);
   const start = await at(page, cue.x + 0.5, cue.y);
   await page.mouse.move(start.x, start.y);
-  const before = await page.evaluate(() => window.cueai.aimAngle);
+  const before = await page.evaluate(() => window.pocket.aimAngle);
 
   // One shift-move a long way round: the aim should ease toward the cursor
   // rather than snap to it, which is what makes a quarter-degree cut reachable.
@@ -222,7 +222,7 @@ async function shiftAimsSlowly(page) {
   await page.keyboard.down("Shift");
   await page.mouse.move(away.x, away.y);
   await page.keyboard.up("Shift");
-  const after = await page.evaluate(() => window.cueai.aimAngle);
+  const after = await page.evaluate(() => window.pocket.aimAngle);
 
   const demanded = Math.atan2(cue.y + 0.35 - cue.y, cue.x + 0.35 - cue.x) - before;
   const moved = after - before;
@@ -238,13 +238,13 @@ async function theArrowKeysMoveByAHair(page) {
   await resetToAim(page);
   await page.evaluate(() => document.body.focus());
 
-  const a0 = await page.evaluate(() => window.cueai.aimAngle);
+  const a0 = await page.evaluate(() => window.pocket.aimAngle);
   await page.keyboard.press("ArrowRight");
-  const a1 = await page.evaluate(() => window.cueai.aimAngle);
+  const a1 = await page.evaluate(() => window.pocket.aimAngle);
   await page.keyboard.down("Shift");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.up("Shift");
-  const a2 = await page.evaluate(() => window.cueai.aimAngle);
+  const a2 = await page.evaluate(() => window.pocket.aimAngle);
 
   const coarse = a1 - a0;
   const fine = a2 - a1;
@@ -254,9 +254,9 @@ async function theArrowKeysMoveByAHair(page) {
     `${((coarse * 180) / Math.PI).toFixed(3)}° plain, ${((fine * 180) / Math.PI).toFixed(3)}° with shift`
   );
 
-  const p0 = await page.evaluate(() => window.cueai.power);
+  const p0 = await page.evaluate(() => window.pocket.power);
   await page.keyboard.press("ArrowUp");
-  const p1 = await page.evaluate(() => window.cueai.power);
+  const p1 = await page.evaluate(() => window.pocket.power);
   const readout = await page.evaluate(() => document.getElementById("power-readout").textContent);
   check(
     "the up arrow raises the power, and the readout follows",
@@ -275,8 +275,8 @@ async function aQuickClickDoesNotShoot(page) {
   await page.mouse.up();
   await wait(120);
 
-  const mode = await page.evaluate(() => window.cueai.mode);
-  const shots = await page.evaluate(() => window.cueai.history.length);
+  const mode = await page.evaluate(() => window.pocket.mode);
+  const shots = await page.evaluate(() => window.pocket.history.length);
   check(
     "a quick click lines the shot up rather than playing it",
     mode === "aim" && shots === 0,
@@ -295,7 +295,7 @@ async function holdingStillDoesShoot(page) {
   await page.mouse.up();
   await wait(120);
 
-  const mode = await page.evaluate(() => window.cueai.mode);
+  const mode = await page.evaluate(() => window.pocket.mode);
   check(
     "a press held on the spot plays the shot",
     ["stroking", "rolling"].includes(mode),
@@ -312,13 +312,13 @@ async function pullingTheCueBackSetsThePower(page) {
   // drawn, and the further it comes back the harder the shot.
   const ahead = await at(page, cue.x + 0.5, cue.y);
   await page.mouse.move(ahead.x, ahead.y);
-  const angle = await page.evaluate(() => window.cueai.aimAngle);
-  const before = await page.evaluate(() => window.cueai.power);
+  const angle = await page.evaluate(() => window.pocket.aimAngle);
+  const before = await page.evaluate(() => window.pocket.power);
 
   await page.mouse.down();
   const short = await at(page, cue.x + 0.5 - DRAG_DEADZONE * 0.4, cue.y);
   await page.mouse.move(short.x, short.y);
-  const nudged = await page.evaluate(() => window.cueai.power);
+  const nudged = await page.evaluate(() => window.pocket.power);
   check(
     "a twitch inside the dead zone does not change the power",
     Math.abs(nudged - before) < 1e-9,
@@ -327,8 +327,8 @@ async function pullingTheCueBackSetsThePower(page) {
 
   const drawn = await at(page, cue.x + 0.5 - 0.25, cue.y);
   await page.mouse.move(drawn.x, drawn.y, { steps: 6 });
-  const pulled = await page.evaluate(() => window.cueai.power);
-  const aimHeld = await page.evaluate(() => window.cueai.aimAngle);
+  const pulled = await page.evaluate(() => window.pocket.power);
+  const aimHeld = await page.evaluate(() => window.pocket.aimAngle);
   check(
     "drawing the cue back raises the power without disturbing the aim",
     pulled > before + 0.1 && Math.abs(aimHeld - angle) < 1e-9,
@@ -337,7 +337,7 @@ async function pullingTheCueBackSetsThePower(page) {
 
   await page.mouse.up();
   await wait(120);
-  const mode = await page.evaluate(() => window.cueai.mode);
+  const mode = await page.evaluate(() => window.pocket.mode);
   check(
     "releasing a drawn cue plays the shot",
     ["stroking", "rolling"].includes(mode),
@@ -354,7 +354,7 @@ async function theControlsOwnTheirOwnKeys(page) {
   await page.focus("#difficulty");
   await page.keyboard.press("Space");
   await wait(120);
-  const afterSelect = await page.evaluate(() => window.cueai.mode);
+  const afterSelect = await page.evaluate(() => window.pocket.mode);
   check(
     "space in a dropdown does not play a shot",
     afterSelect === "aim",
@@ -364,7 +364,7 @@ async function theControlsOwnTheirOwnKeys(page) {
   await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press("Space");
   await wait(120);
-  const afterTable = await page.evaluate(() => window.cueai.mode);
+  const afterTable = await page.evaluate(() => window.pocket.mode);
   check(
     "space with nothing focused plays the shot",
     ["stroking", "rolling"].includes(afterTable),
@@ -376,15 +376,15 @@ async function theControlsOwnTheirOwnKeys(page) {
 async function theSpinWidgetMovesTheTip(page) {
   await resetToAim(page);
   const box = await (await page.$("#spin")).boundingBox();
-  const before = await page.evaluate(() => window.cueai.spin);
+  const before = await page.evaluate(() => window.pocket.spin);
 
   // Bottom of the circle: draw. Then drag well outside it, which must clamp to
   // the miscue limit rather than let the tip leave the ball.
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.78);
   await page.mouse.down();
-  const drawn = await page.evaluate(() => window.cueai.spin);
+  const drawn = await page.evaluate(() => window.pocket.spin);
   await page.mouse.move(box.x + box.width * 2, box.y + box.height / 2, { steps: 4 });
-  const clamped = await page.evaluate(() => window.cueai.spin);
+  const clamped = await page.evaluate(() => window.pocket.spin);
   await page.mouse.up();
 
   const magnitude = Math.hypot(clamped.x, clamped.y);
@@ -400,7 +400,7 @@ async function theShootButtonWorks(page) {
   const disabledBefore = await page.evaluate(() => document.getElementById("shoot").disabled);
   await page.click("#shoot");
   await wait(120);
-  const mode = await page.evaluate(() => window.cueai.mode);
+  const mode = await page.evaluate(() => window.pocket.mode);
   const disabledDuring = await page.evaluate(() => document.getElementById("shoot").disabled);
   check(
     "the shoot button plays a shot and locks while the balls roll",

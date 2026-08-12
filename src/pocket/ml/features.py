@@ -22,9 +22,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cueai.physics.analytic import solve_free_ball
-from cueai.physics.constants import BallParams, ShotParams, TableParams
-from cueai.physics.simulator import FEATURE_NAMES as SHOT_FEATURE_NAMES
+from pocket.physics.analytic import solve_free_ball
+from pocket.physics.constants import BallParams, ShotParams, TableParams
+from pocket.physics.simulator import FEATURE_NAMES as SHOT_FEATURE_NAMES
 
 BASELINE_FEATURE_NAMES = [
     "base_cue_x",        # closed-form resting position of the cue ball
@@ -54,7 +54,7 @@ def build_features(
     radius: float = 0.028575,
 ) -> np.ndarray:
     """Model input for a single shot. Order matches :data:`FEATURE_NAMES`."""
-    from cueai.physics.simulator import shot_feature_vector
+    from pocket.physics.simulator import shot_feature_vector
 
     cue = np.asarray(cue_pos, dtype=np.float64)
     obj = np.asarray(obj_pos, dtype=np.float64) if obj_pos is not None else None

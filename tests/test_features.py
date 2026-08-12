@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cueai.ml import features as feat
-from cueai.ml.dataset import simulate_sample
-from cueai.physics.constants import ShotParams, TableParams
+from pocket.ml import features as feat
+from pocket.ml.dataset import simulate_sample
+from pocket.physics.constants import ShotParams, TableParams
 
 
 def test_feature_names_match_vector_length() -> None:

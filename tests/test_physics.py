@@ -1,13 +1,13 @@
-"""Unit tests for CueAI physics + full rack."""
+"""Unit tests for the physics core + full rack."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from cueai.physics.ball import Ball, MotionState, integrate_ball
-from cueai.physics.constants import BallParams, ShotParams, TableParams
-from cueai.physics.rack import make_full_rack
-from cueai.physics.simulator import Simulator, shot_feature_vector
+from pocket.physics.ball import Ball, MotionState, integrate_ball
+from pocket.physics.constants import BallParams, ShotParams, TableParams
+from pocket.physics.rack import make_full_rack
+from pocket.physics.simulator import Simulator, shot_feature_vector
 
 
 def test_ball_comes_to_rest():

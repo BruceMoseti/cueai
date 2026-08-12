@@ -6,14 +6,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cueai.physics.ball import Ball, integrate_ball
-from cueai.physics.collisions import (
+from pocket.physics.ball import Ball, integrate_ball
+from pocket.physics.collisions import (
     check_pocket,
     resolve_all_ball_collisions,
     resolve_cushion,
 )
-from cueai.physics.constants import BallParams, ShotParams, TableParams
-from cueai.physics.rack import make_full_rack
+from pocket.physics.constants import BallParams, ShotParams, TableParams
+from pocket.physics.rack import make_full_rack
 
 
 @dataclass
@@ -56,7 +56,7 @@ class Simulator:
         obj_pos: tuple[float, float] | None = None,
     ) -> list[Ball]:
         """Legacy 2-ball setup (kept for ML dataset compatibility)."""
-        from cueai.physics.rack import identity_for
+        from pocket.physics.rack import identity_for
 
         L, W = self.table.length, self.table.width
         if cue_pos is None:

@@ -3,7 +3,7 @@
 Measure prediction latency and accuracy, and write docs/BENCHMARKS.md.
 
 Everything the README claims about speed comes from this script. Run it after
-``cueai-train`` so the accuracy section can read models/metrics.json:
+``pocket-train`` so the accuracy section can read models/metrics.json:
 
     python scripts/benchmark.py
 """
@@ -23,10 +23,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from cueai.ml.infer import TrajectoryPredictor  # noqa: E402
-from cueai.physics.analytic import predict_endpoint  # noqa: E402
-from cueai.physics.constants import ShotParams, TableParams  # noqa: E402
-from cueai.physics.simulator import Simulator  # noqa: E402
+from pocket.ml.infer import TrajectoryPredictor  # noqa: E402
+from pocket.physics.analytic import predict_endpoint  # noqa: E402
+from pocket.physics.constants import ShotParams, TableParams  # noqa: E402
+from pocket.physics.simulator import Simulator  # noqa: E402
 
 
 def time_calls(fn, repeats: int) -> dict[str, float]:
@@ -69,7 +69,7 @@ def measure_latency(repeats: int) -> dict[str, dict[str, float]]:
     if gbm_path.exists():
         import joblib
 
-        from cueai.ml.features import build_features
+        from pocket.ml.features import build_features
 
         bundle = joblib.load(gbm_path)
         row = build_features(shot, cue, (1.4, 0.7), table)[None, :]

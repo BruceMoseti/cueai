@@ -1,9 +1,9 @@
-// CueAI C++ physics core — cloth sliding / rolling step (NumPy-parity helpers)
+// C++ physics core — cloth sliding / rolling step (NumPy-parity helpers)
 #pragma once
 #include <cmath>
 #include <array>
 
-namespace cueai {
+namespace pocket {
 
 constexpr double G = 9.81;
 
@@ -55,4 +55,4 @@ inline void integrate_rolling(BallState& b, double mu_r, double mu_sp, double dt
     b.x += b.vx * dt; b.y += b.vy * dt;
 }
 
-}  // namespace cueai
+}  // namespace pocket

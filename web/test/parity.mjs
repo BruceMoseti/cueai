@@ -2,7 +2,7 @@
  * Check the browser physics against the Python reference simulator.
  *
  * `scripts/export_parity_cases.py` runs a spread of shots through
- * `src/cueai/physics/` and records where every ball came to rest. This replays
+ * `src/pocket/physics/` and records where every ball came to rest. This replays
  * the same shots through the module the game actually uses and reports the
  * worst disagreement. A port that is not measured is a rumour.
  *

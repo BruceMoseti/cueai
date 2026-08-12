@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cueai.physics.constants import BallParams, G, TableParams
+from pocket.physics.constants import BallParams, G, TableParams
 
 if TYPE_CHECKING:
-    from cueai.physics.rack import BallIdentity
+    from pocket.physics.rack import BallIdentity
 
 
 class MotionState(Enum):

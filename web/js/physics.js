@@ -1,5 +1,5 @@
 /**
- * Billiards physics, ported line for line from `src/cueai/physics/`.
+ * Billiards physics, ported line for line from `src/pocket/physics/`.
  *
  * This is deliberately a transcription rather than a reimplementation: the
  * Python package is the reference that `tests/test_validation.py` checks
@@ -15,7 +15,7 @@ export const G = 9.81;
 /**
  * Two balls count as touching once their surfaces are inside this band.
  *
- * Mirrors `CONTACT_BAND` in `cueai/physics/collisions.py`, where the reasoning
+ * Mirrors `CONTACT_BAND` in `pocket/physics/collisions.py`, where the reasoning
  * is written out: the value has to sit far above the floating-point noise in a
  * position and far below anything physical, and it must not coincide with the
  * gap balls are racked at, or which of a rack's thirty contacts exist becomes

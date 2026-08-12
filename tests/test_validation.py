@@ -12,17 +12,17 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cueai.physics import analytic
-from cueai.physics.ball import Ball, MotionState, integrate_ball
-from cueai.physics.collisions import (
+from pocket.physics import analytic
+from pocket.physics.ball import Ball, MotionState, integrate_ball
+from pocket.physics.collisions import (
     CONTACT_BAND,
     resolve_all_ball_collisions,
     resolve_ball_ball,
     resolve_cushion,
 )
-from cueai.physics.constants import BallParams, G, ShotParams, TableParams
-from cueai.physics.rack import make_full_rack
-from cueai.physics.simulator import Simulator
+from pocket.physics.constants import BallParams, G, ShotParams, TableParams
+from pocket.physics.rack import make_full_rack
+from pocket.physics.simulator import Simulator
 
 DT = 1e-4
 SMOOTH_CLOTH = {"friction_noise_amp": 0.0}

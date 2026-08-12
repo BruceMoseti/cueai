@@ -736,7 +736,7 @@ function syncUI() {
 // Test seam. `web/test/browser.mjs` drives a real Chrome through this rather
 // than through synthetic mouse maths, so the end-to-end test exercises the
 // same functions the buttons call.
-window.cueai = {
+window.pocket = {
   get state() {
     return state;
   },

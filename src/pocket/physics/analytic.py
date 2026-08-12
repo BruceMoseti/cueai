@@ -1,12 +1,12 @@
 """
 Closed-form solutions for the straight-shot limit of the cloth model.
 
-These are the textbook results the numerical integrator in :mod:`cueai.physics.ball`
+These are the textbook results the numerical integrator in :mod:`pocket.physics.ball`
 must reproduce, so they serve two purposes:
 
 1. Ground truth for the validation suite (``tests/test_validation.py``).
 2. A microsecond-cost baseline predictor that the learned residual model
-   corrects (:mod:`cueai.ml`), which is what makes the "physics-informed"
+   corrects (:mod:`pocket.ml`), which is what makes the "physics-informed"
    framing measurable rather than decorative.
 
 Derivation (ball of mass m, radius R, I = 2/5 mR², struck along +x)
@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cueai.physics.constants import BallParams, G, ShotParams, TableParams
+from pocket.physics.constants import BallParams, G, ShotParams, TableParams
 
 # Slip decays 3.5x faster than the centre of mass because the friction torque
 # also spins the ball up: 1 + mR²/I = 1 + 5/2.
