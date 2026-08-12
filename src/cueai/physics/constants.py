@@ -65,17 +65,32 @@ class ShotParams:
 
     speed: float          # tip speed imparted → cue-ball linear speed (m/s)
     angle: float          # launch angle radians, 0 = +x
-    english_x: float = 0  # sidespin tip offset as fraction of R (-1..1)
-    english_y: float = 0  # topspin / backspin tip offset (-1..1)
+    english_x: float = 0  # sidespin tip offset as fraction of R (+ = right english)
+    english_y: float = 0  # topspin (+) / backspin (−) tip offset (-1..1)
     cue_elevation: float = 0.0  # radians (jump / massé lite)
 
     def initial_omega(self, ball: BallParams) -> np.ndarray:
-        """Map tip offset to angular velocity (simplified cue model)."""
+        """
+        Map cue tip offset to initial angular velocity.
+
+        A horizontal impulse J applied a distance d = f·R off centre gives
+        Δv = J/m and Δω = J·d/I, so with I = (2/5)mR²:
+
+            ω = 2.5 · f · v / R
+
+        Hence f = 0.4 (tip 2R/5 above centre, i.e. 7R/5 above the cloth)
+        launches the ball already rolling — the standard "natural roll" result —
+        and |f| > 0.5 is past the practical miscue limit.
+
+        - Top/backspin acts about the horizontal axis perpendicular to travel,
+          which for a shot along θ is (-sin θ, cos θ, 0) — the same axis as
+          natural roll, so english_y = +1 is pure follow.
+        - Sidespin acts about the vertical axis; positive english_x (right
+          english) is clockwise seen from above, hence negative ω_z.
+        """
         R = ball.radius
-        # Tip contact ≈ tangential impulse → ω ≈ (v_tip × r) / (k R)
-        # Use Alciatore-style: ω_y ~ -english_x * v / R, ω_x ~ english_y * v / R
         v = self.speed
-        wx = self.english_y * v / R
-        wy = -self.english_x * v / R
-        wz = 0.15 * self.english_x * v / R  # slight vertical-axis from sidespin
-        return np.array([wx, wy, wz], dtype=np.float64)
+        roll_axis = np.array([-np.sin(self.angle), np.cos(self.angle), 0.0])
+        omega = 2.5 * self.english_y * (v / R) * roll_axis
+        omega[2] -= 2.5 * self.english_x * v / R
+        return omega

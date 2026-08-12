@@ -58,11 +58,16 @@ class Ball:
         return self.params.inertia
 
     def slip_velocity(self) -> np.ndarray:
-        """Velocity of cloth contact point: u = v + ω × (-Rẑ)."""
+        """
+        Velocity of the cloth contact point: u = v + ω × (-Rẑ).
+
+        Expanding the cross product gives u = (vₓ - Rω_y, v_y + Rω_x), so pure
+        rolling (u = 0) corresponds to ω_y = vₓ/R and ω_x = -v_y/R.
+        """
         return np.array(
             [
-                self.vel[0] + self.omega[1] * self.R,
-                self.vel[1] - self.omega[0] * self.R,
+                self.vel[0] - self.omega[1] * self.R,
+                self.vel[1] + self.omega[0] * self.R,
             ],
             dtype=np.float64,
         )
@@ -77,7 +82,9 @@ class Ball:
         u_mag = float(np.linalg.norm(u))
         v_mag = self.speed()
         wz = abs(self.omega[2])
-        slip_eps = max(0.05, 0.05 * max(v_mag, 0.1))
+        # Tolerance must exceed the per-step slip decrement (≈3.5 μ g dt) to avoid
+        # chattering between SLIDING and ROLLING near the transition.
+        slip_eps = max(0.01, 0.01 * v_mag)
         if v_mag < eps and u_mag < eps and wz < eps:
             return MotionState.STATIONARY
         if u_mag < slip_eps and v_mag >= eps:
@@ -129,9 +136,10 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         if u_mag < 1e-9:
             return b
         u_hat = u / u_mag
-        # Curving force: slip has a component from sidespin → path curves
+        # Friction opposes the contact-point slip, not the ball centre velocity
         a = -mu_s * G * u_hat
-        alpha = np.array([-R * m * a[1] / I, R * m * a[0] / I, 0.0])
+        # τ = (-Rẑ) × F  ⇒  α = (R m a_y / I, -R m a_x / I, 0)
+        alpha = np.array([R * m * a[1] / I, -R * m * a[0] / I, 0.0])
         if abs(b.omega[2]) > 1e-6:
             alpha[2] = -np.sign(b.omega[2]) * 2.5 * mu_sp * G / R
 
@@ -150,12 +158,9 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         b.omega[:2] = 0
         return b
     v_hat = b.vel / v_mag
-    # Mild curve while rolling if residual ωz (english hold)
+    # Rolling resistance only. Vertical-axis spin exerts no lateral force on a
+    # rolling rigid sphere; it acts through cushion and ball-ball throw instead.
     a = -mu_r * G * v_hat
-    if abs(b.omega[2]) > 0.5:
-        # small lateral force from residual spin-on-cloth coupling
-        lateral = np.array([-v_hat[1], v_hat[0]]) * (0.002 * b.omega[2])
-        a = a + lateral
     b.vel = b.vel + a * dt
     if b.speed() < 2e-2:
         b.vel[:] = 0
