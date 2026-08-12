@@ -239,3 +239,19 @@ def test_analytic_baseline_tracks_simulator_on_open_table() -> None:
     result = sim.simulate_shot(shot, cue_pos=(0.3, 0.635), object_ball=False)
     predicted = analytic.predict_endpoint(shot, (0.3, 0.635), table)
     assert float(result.endpoints[0][0]) == pytest.approx(float(predicted[0]), abs=0.02)
+
+
+def test_analytic_baseline_tracks_simulator_across_a_cushion() -> None:
+    """
+    Agreement must survive a rail, which is only true if the closed-form model
+    carries spin through the bounce: a ball arrives at the next rail sliding.
+    """
+    table = TableParams(mu_slide=0.2, mu_roll=0.02, **SMOOTH_CLOTH)
+    sim = Simulator(table=table, dt=5e-4, max_time=30.0)
+    shot = ShotParams(speed=2.0, angle=0.0)
+    start = (0.4, 0.5)
+    result = sim.simulate_shot(shot, cue_pos=start, object_ball=False)
+    assert result.cushion_events >= 1
+    predicted = analytic.predict_endpoint(shot, start, table)
+    error = float(np.linalg.norm(result.endpoints[0] - predicted))
+    assert error < 0.10, f"closed-form baseline off by {error * 1000:.0f} mm"

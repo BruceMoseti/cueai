@@ -27,6 +27,7 @@ class SimResult:
     endpoints: dict[int, np.ndarray]
     ball_meta: dict[int, dict] = field(default_factory=dict)
     collision_events: int = 0
+    cushion_events: int = 0
 
 
 @dataclass
@@ -103,6 +104,7 @@ class Simulator:
         vels: dict[int, list[np.ndarray]] = {b.id: [] for b in balls}
         omgs: dict[int, list[np.ndarray]] = {b.id: [] for b in balls}
         collisions = 0
+        cushions = 0
         rest_steps = 0
 
         meta = {
@@ -121,7 +123,10 @@ class Simulator:
                 if b.pocketed:
                     continue
                 balls[i] = integrate_ball(b, self.table, self.dt)
+                pre_rail_vel = balls[i].vel.copy()
                 balls[i] = resolve_cushion(balls[i], self.table)
+                if not np.allclose(pre_rail_vel, balls[i].vel, atol=1e-6):
+                    cushions += 1
                 balls[i] = check_pocket(balls[i], self.table)
                 if balls[i].speed() > 1e-4 or float(np.linalg.norm(balls[i].omega)) > 1e-3:
                     moving = True
@@ -197,6 +202,7 @@ class Simulator:
             endpoints=endpoints,
             ball_meta=meta,
             collision_events=collisions,
+            cushion_events=cushions,
         )
 
     def simulate_shot(

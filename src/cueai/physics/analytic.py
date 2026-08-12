@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from cueai.physics.constants import G, ShotParams, TableParams
+from cueai.physics.constants import G, BallParams, ShotParams, TableParams
 
 # Slip decays 3.5x faster than the centre of mass because the friction torque
 # also spins the ball up: 1 + mR²/I = 1 + 5/2.
@@ -86,15 +86,161 @@ def roll_distance(v_roll: float, mu_roll: float) -> float:
     return v_roll**2 / (2.0 * mu_roll * G)
 
 
-def _reflect(coord: float, lo: float, hi: float) -> float:
-    """Fold a coordinate into [lo, hi] as an ideal mirror would."""
-    span = hi - lo
-    if span <= 0:
-        return lo
-    folded = (coord - lo) % (2.0 * span)
-    if folded > span:
-        folded = 2.0 * span - folded
-    return lo + folded
+MAX_EVENTS = 32
+# Spatial resolution used to test a segment against the pocket mouths.
+POCKET_SCAN_STEP = 0.01
+
+
+@dataclass(frozen=True)
+class FreeBallOutcome:
+    """Where an unobstructed ball ends up, and what happened on the way."""
+
+    position: np.ndarray
+    potted: bool
+    cushions: int
+
+
+def _slide_rail_time(
+    pos: np.ndarray, vel: np.ndarray, accel: np.ndarray, lo: np.ndarray, hi: np.ndarray, t_end: float
+) -> tuple[float, int]:
+    """
+    First cushion crossing during a parabolic sliding segment.
+
+    Solves ½a t² + v t + (p - bound) = 0 per axis and boundary, keeping the
+    earliest root inside (0, t_end].
+    """
+    best_t, best_axis = t_end, -1
+    for axis in (0, 1):
+        for bound in (lo[axis], hi[axis]):
+            a, b, c = 0.5 * accel[axis], vel[axis], pos[axis] - bound
+            if abs(a) < 1e-14:
+                roots = [-c / b] if abs(b) > 1e-14 else []
+            else:
+                disc = b * b - 4 * a * c
+                if disc < 0:
+                    continue
+                sqrt_disc = float(np.sqrt(disc))
+                roots = [(-b - sqrt_disc) / (2 * a), (-b + sqrt_disc) / (2 * a)]
+            for root in roots:
+                if 1e-9 < root <= best_t:
+                    best_t, best_axis = float(root), axis
+    return best_t, best_axis
+
+
+def _ray_rail_distance(
+    pos: np.ndarray, direction: np.ndarray, lo: np.ndarray, hi: np.ndarray
+) -> tuple[float, int]:
+    """Distance to the first cushion along a straight rolling segment."""
+    best_distance, best_axis = np.inf, -1
+    for axis in (0, 1):
+        component = direction[axis]
+        if abs(component) < 1e-12:
+            continue
+        bound = hi[axis] if component > 0 else lo[axis]
+        distance = (bound - pos[axis]) / component
+        if 1e-9 < distance < best_distance:
+            best_distance, best_axis = float(distance), axis
+    return best_distance, best_axis
+
+
+def _first_pocket_hit(points: np.ndarray, table: TableParams) -> int:
+    """Index of the first sampled point inside a pocket mouth, or -1."""
+    if not table.pockets or len(points) == 0:
+        return -1
+    mouths = np.asarray(table.pockets, dtype=np.float64)
+    distances = np.linalg.norm(points[:, None, :] - mouths[None, :, :], axis=2)
+    inside = np.nonzero((distances < table.pocket_radius).any(axis=1))[0]
+    return int(inside[0]) if len(inside) else -1
+
+
+def _sample_count(length: float) -> int:
+    return int(np.clip(np.ceil(abs(length) / POCKET_SCAN_STEP), 2, 4096))
+
+
+def solve_free_ball(
+    pos: np.ndarray,
+    vel: np.ndarray,
+    spin_contact: np.ndarray,
+    table: TableParams,
+    radius: float = 0.028575,
+) -> FreeBallOutcome:
+    """
+    Closed-form trajectory of a single ball on an otherwise empty table.
+
+    Integrates nothing. The motion is a sequence of exactly solvable segments:
+
+    * **Sliding.** The slip velocity u decays along a fixed direction, so the
+      friction force is constant and the path is a parabola of known duration
+      |u| / (3.5 μ_s g).
+    * **Rolling.** A straight line of length v² / (2 μ_r g).
+    * **Cushion.** The normal velocity component reverses and loses energy while
+      the spin term u - v carries through, which is what makes a ball arrive at
+      the next rail sliding rather than rolling.
+
+    ``spin_contact`` is ω × (-Rẑ), the spin contribution to the contact-point
+    velocity, so the slip velocity is ``vel + spin_contact``.
+
+    Not modelled: ball-ball contact, rail friction and spin transfer, the
+    speed-dependent softening of the cushions, and cloth inhomogeneity.
+    """
+    pos = np.asarray(pos, dtype=np.float64).copy()
+    vel = np.asarray(vel, dtype=np.float64).copy()
+    spin = np.asarray(spin_contact, dtype=np.float64).copy()
+    lo = np.array([radius, radius])
+    hi = np.array([table.length - radius, table.width - radius])
+    cushions = 0
+
+    for _ in range(MAX_EVENTS):
+        slip = vel + spin
+        slip_speed = float(np.linalg.norm(slip))
+        speed = float(np.linalg.norm(vel))
+
+        if slip_speed > 1e-4:
+            accel = -table.mu_slide * G * (slip / slip_speed)
+            t_slide = slip_speed / (SLIP_DECAY_FACTOR * table.mu_slide * G)
+            t_hit, axis = _slide_rail_time(pos, vel, accel, lo, hi, t_slide)
+            t = min(t_slide, t_hit) if axis >= 0 else t_slide
+
+            steps = np.linspace(0.0, t, _sample_count(speed * t))[:, None]
+            path = pos + vel * steps + 0.5 * accel * steps**2
+            hit = _first_pocket_hit(path, table)
+            if hit >= 0:
+                return FreeBallOutcome(path[hit], True, cushions)
+
+            pos = pos + vel * t + 0.5 * accel * t**2
+            vel = vel + accel * t
+            spin = (slip - SLIP_DECAY_FACTOR * table.mu_slide * G * (slip / slip_speed) * t) - vel
+            if axis < 0 or t_hit >= t_slide:
+                spin = -vel  # slip exhausted: the ball is now rolling
+                continue
+        else:
+            if speed < 1e-4:
+                return FreeBallOutcome(pos, False, cushions)
+            direction = vel / speed
+            stop_distance = roll_distance(speed, table.mu_roll)
+            rail_distance, axis = _ray_rail_distance(pos, direction, lo, hi)
+            travel = min(stop_distance, rail_distance)
+
+            steps = np.linspace(0.0, travel, _sample_count(travel))[:, None]
+            path = pos + direction * steps
+            hit = _first_pocket_hit(path, table)
+            if hit >= 0:
+                return FreeBallOutcome(path[hit], True, cushions)
+
+            pos = pos + direction * travel
+            if stop_distance <= rail_distance:
+                return FreeBallOutcome(pos, False, cushions)
+            speed = float(np.sqrt(max(speed**2 - 2 * table.mu_roll * G * travel, 0.0)))
+            vel = speed * direction
+            spin = -vel
+
+        # Cushion impulse: reverse and damp the normal velocity component. The
+        # spin term is untouched, so the ball leaves the rail sliding.
+        vel[axis] *= -table.e_cushion
+        pos[axis] = float(np.clip(pos[axis], lo[axis], hi[axis]))
+        cushions += 1
+
+    return FreeBallOutcome(pos, False, cushions)
 
 
 def predict_endpoint(
@@ -103,22 +249,11 @@ def predict_endpoint(
     table: TableParams,
     radius: float = 0.028575,
 ) -> np.ndarray:
-    """
-    Baseline resting position of the cue ball, in closed form.
-
-    Travels the analytic stopping distance along the aim line and mirrors off
-    the cushions. Deliberately ignores cushion energy loss, ball-ball contact,
-    throw and pockets — those are the corrections the learned model supplies.
-    """
-    solution = straight_shot(shot.speed, table, english_y=shot.english_y)
-    start = np.asarray(cue_pos, dtype=np.float64)
-    end = start + solution.d_total * np.array(
-        [np.cos(shot.angle), np.sin(shot.angle)], dtype=np.float64
-    )
-    return np.array(
-        [
-            _reflect(end[0], radius, table.length - radius),
-            _reflect(end[1], radius, table.width - radius),
-        ],
-        dtype=np.float64,
-    )
+    """Closed-form resting position of the cue ball for a given shot."""
+    omega = shot.initial_omega(BallParams(radius=radius))
+    # ω × (-Rẑ) = (-R ω_y, R ω_x)
+    spin_contact = np.array([-radius * omega[1], radius * omega[0]])
+    velocity = shot.speed * np.array([np.cos(shot.angle), np.sin(shot.angle)])
+    return solve_free_ball(
+        np.asarray(cue_pos, dtype=np.float64), velocity, spin_contact, table, radius
+    ).position
