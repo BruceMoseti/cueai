@@ -9,7 +9,7 @@
  *   node web/test/parity.mjs [--verbose]
  */
 
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -127,6 +127,28 @@ function main() {
         `(${(pySeconds / jsSeconds).toFixed(0)}x)`
     );
   }
+
+  // The page quotes these numbers. Writing them here rather than typing them
+  // into the HTML is the difference between a measurement and a claim.
+  const out = join(HERE, "..", "data", "parity.json");
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(
+    out,
+    `${JSON.stringify(
+      {
+        cases: cases.length,
+        agreed: cases.length - failures,
+        worst_mm: worstOverall,
+        worst_case: worstName,
+        table_seconds: tableSeconds,
+        python_seconds: pySeconds,
+        browser_seconds: jsSeconds,
+        speedup: pySeconds / jsSeconds,
+      },
+      null,
+      2
+    )}\n`
+  );
 
   if (failures > 0) {
     console.error(`\n${failures} case(s) diverged. The browser port no longer matches the reference.`);

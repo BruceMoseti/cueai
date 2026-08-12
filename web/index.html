@@ -23,7 +23,7 @@
           Python reference is validated against.
         </div>
         <nav>
-          <a href="https://github.com/gauthamgudibandi/cueAI">Repository</a>
+          <a href="https://github.com/BruceMoseti/cueai">Repository</a>
           <a href="#how">How it works</a>
         </nav>
       </header>
@@ -46,7 +46,7 @@
             </div>
 
             <div class="power-block">
-              <label for="power">Power <span id="power-hint" style="text-transform: none; letter-spacing: 0">— or drag back from the cue ball</span></label>
+              <label for="power">Power <span id="power-hint" style="text-transform: none; letter-spacing: 0">— move to aim, drag back from the cue ball to strike</span></label>
               <div class="power-row">
                 <input id="power" type="range" min="0.06" max="1" step="0.01" value="0.42" />
                 <span class="readout" id="power-readout">3.1 m/s</span>
@@ -180,10 +180,35 @@
               <code>5/7 v₀</code>, and stopping distance was four times short.
             </p>
             <div class="measure">
-              <div><div class="n" id="m-tests">44</div><div class="l">physics tests</div></div>
+              <div>
+                <div class="n" data-fact="physics-tests">31</div>
+                <div class="l">physics tests</div>
+              </div>
               <div><div class="n">3 mm</div><div class="l">timestep convergence</div></div>
               <div><div class="n">±0.5°</div><div class="l">aim tolerance, measured</div></div>
             </div>
+          </div>
+
+          <div class="card">
+            <h3>The bug the tests could not see</h3>
+            <p>
+              Closed-form checks exercise one ball at a time, so a defect that only exists
+              between balls survives them. This one did. The solver counted two balls as
+              touching when the gap between their surfaces was under
+              <code>1e-4 m</code> — and the rack was built with a <code>1e-4 m</code>
+              clearance. All thirty contacts in the triangle sat exactly on the threshold,
+              and which side each fell on came down to whether <code>hypot</code> rounded up
+              or down. Sixteen registered. Fourteen did not.
+            </p>
+            <p>
+              A break propagated through a contact graph with holes in it: balls in the
+              middle of the rack came out of a full-power break having barely moved, and the
+              table opened up <em>less</em> the harder it was struck. It was found by
+              measuring break spread against cue speed and getting the sign wrong, not by a
+              test failing. What fixed it was giving the tolerance a name, using the same one
+              everywhere, and racking the balls actually touching so nothing sits on the
+              boundary.
+            </p>
           </div>
 
           <div class="card">
@@ -191,16 +216,29 @@
             <p>
               <code>web/js/physics.js</code> is a hand port of
               <code>src/cueai/physics/</code>, and a port nobody measures is a rumour.
-              <code>scripts/export_parity_cases.py</code> runs 35 shots through the Python
-              simulator — draw, follow, english off two rails, thin cuts, clusters, and full
-              sixteen-ball breaks — and records where every ball stopped.
+              <code>scripts/export_parity_cases.py</code> runs
+              <span data-fact="parity-cases">35</span> shots through the Python simulator —
+              draw, follow, english off two rails, thin cuts, clusters, and full sixteen-ball
+              breaks — and records where every ball stopped.
               <code>web/test/parity.mjs</code> replays them here and compares.
             </p>
             <p>
-              The largest disagreement across all 35 is <b id="m-parity">9.7 × 10⁻¹² mm</b>,
-              which is float64 round-off rather than a difference in behaviour. It runs in
-              continuous integration, so the two implementations cannot quietly drift apart.
+              The largest disagreement across all of them is
+              <b data-fact="parity-worst">0.0012 mm</b> — a thousandth of a
+              millimetre, accumulated over seconds of a chaotic sixteen-ball break, and far
+              below the scale at which the two could be said to behave differently. It runs
+              in continuous integration, so they cannot quietly drift apart.
             </p>
+            <div class="measure">
+              <div>
+                <div class="n" data-fact="parity-speedup">49×</div>
+                <div class="l">faster than the reference</div>
+              </div>
+              <div>
+                <div class="n" data-fact="parity-table-seconds">156 s</div>
+                <div class="l">of table time, both ways</div>
+              </div>
+            </div>
           </div>
 
           <div class="card">
@@ -222,34 +260,46 @@
           </div>
 
           <div class="card">
-            <h3>Where the learned model fits</h3>
+            <h3>Where the learned model fits, and where it does not</h3>
             <p>
               The Python side also trains a surrogate that predicts resting positions
-              directly. It is not used here, and the reason is worth more than the model: on
-              this table the simulator costs about 130 ms for a full rack, which is cheap
-              enough that approximating it buys nothing and costs accuracy.
+              directly, at <b data-fact="surrogate-latency">0.60 ms</b> against
+              <b data-fact="sim-full-rack">4.6 s</b> for a full rack in the reference
+              simulator. It cuts mean endpoint error from
+              <span data-fact="analytic-error">494 mm</span> to
+              <span data-fact="surrogate-error">376 mm</span> against the closed-form
+              baseline it corrects, over <span data-fact="samples">20,000</span> simulated
+              shots.
             </p>
             <p>
-              Where the surrogate earns its place is screening large candidate sets offline,
-              at 0.58 ms against 36.8 s for the Python reference. It reduces mean endpoint
-              error from 494 mm to 378 mm against the closed-form baseline it corrects, and —
-              reported against interest — it loses to plain gradient boosting once a
-              ball-ball collision has to be modelled. Both numbers are regenerated on every
-              training run.
+              The bot above does not use it, and the reason is the more useful result. Ported
+              to the browser the same physics runs
+              <span data-fact="parity-speedup">49×</span> faster, which is enough to simulate
+              the shots worth considering exactly. A surrogate is worth its error when you
+              need to screen far more candidates than you can afford to simulate; inside one
+              turn, you do not. Reported against interest: once a ball-ball collision has to
+              be modelled, it loses to plain gradient boosting
+              (<span data-fact="contact-cuenet">696 mm</span> against
+              <span data-fact="contact-gbm">610 mm</span>). Every number here is rewritten by
+              the training run.
             </p>
           </div>
 
           <div class="card">
             <h3>Reproducing all of it</h3>
             <p>Nothing here is a screenshot of a number that was true once.</p>
-            <code class="eq">make check      # ruff, mypy, 44 tests
+            <code class="eq">make check      # ruff, mypy, the whole test suite
 make parity     # export shots from Python, replay them in Node
 make selfplay   # 20 headless games, every rule branch
+make browser    # load this page in Chrome and play a game
 make all        # dataset → training → benchmarks → figures</code>
             <p>
-              The game itself is dependency-free ES modules: no bundler, no framework, no
-              build step. <code>python3 -m http.server</code> in <code>web/</code> is enough
-              to run everything you see.
+              The figures on this page are written by
+              <code>scripts/site_facts.py</code> from those runs rather than typed in, and
+              continuous integration fails if they drift. The game itself is dependency-free
+              ES modules: no bundler, no framework, no build step.
+              <code>python3 -m http.server</code> in <code>web/</code> is enough to run
+              everything you see.
             </p>
           </div>
         </div>

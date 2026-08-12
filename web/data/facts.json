@@ -1,0 +1,18 @@
+{
+  "physics-tests": "31",
+  "parity-worst": "0.0012 mm",
+  "parity-cases": "35",
+  "parity-speedup": "49\u00d7",
+  "parity-table-seconds": "156 s",
+  "parity-python-seconds": "39 s",
+  "parity-browser-seconds": "0.80 s",
+  "surrogate-error": "376 mm",
+  "analytic-error": "494 mm",
+  "gbm-error": "382 mm",
+  "samples": "20,000",
+  "contact-cuenet": "696 mm",
+  "contact-gbm": "610 mm",
+  "sim-full-rack": "4.6 s",
+  "surrogate-latency": "0.60 ms",
+  "closed-form-latency": "0.27 ms"
+}
