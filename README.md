@@ -42,7 +42,7 @@ Node and compares where each ball stopped.
 | Reference shots replayed | 35 |
 | Worst disagreement, any ball, any shot | **1.2 × 10⁻³ mm** |
 | Table time compared | 156 s |
-| Browser against the Python reference | **49× faster** |
+| Browser against the Python reference | **65× faster** |
 
 Continuous integration runs that check on every push and refuses to deploy the
 page if the two drift apart.
@@ -57,10 +57,10 @@ So the bot spends nothing on aiming. It enumerates every ball-and-pocket pair in
 closed form, discards what is blocked or cut too thin, and spends its entire
 budget *simulating* the survivors to see what each one leaves behind.
 
-It then reports what that cost, every turn, in its own units — six pot lines
-solved, twenty-four futures simulated, two minutes of table time inside two
-seconds of yours. That is what cheap physics buys, and it is the reason the
-strength setting is a number of rollouts rather than an adjective.
+It then reports what that cost, every turn, in its own units: four pot lines
+solved in closed form, sixteen futures simulated, a minute of table time inside
+a third of a second of yours. That is what cheap physics buys, and it is why the
+strength setting is a rollout budget rather than an adjective.
 
 <br clear="right" />
 
@@ -358,7 +358,7 @@ twice, in Python and in JavaScript, because the browser needed it and the
 reference had to stay the reference. A port that nobody measures is a rumour, so
 the two are pinned to each other by 35 recorded shots and compared to a
 thousandth of a millimetre in CI. The one number that made it worth doing is the
-49× speedup, which is what turns "simulate the candidate shots" from a claim
+65× speedup, which is what turns "simulate the candidate shots" from a claim
 into the thing the bot actually does inside a turn.
 
 **Deployability.** The residual model exports to ONNX and runs through ONNX

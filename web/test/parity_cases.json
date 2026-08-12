@@ -21,7 +21,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.40046239100047387,
+    "seconds": 0.39892596599747776,
     "table_time": 6.092000000000369,
     "resting": {
      "0": [
@@ -57,7 +57,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.7588035070002661,
+    "seconds": 0.7571954609993554,
     "table_time": 5.080000000000031,
     "resting": {
      "0": [
@@ -97,7 +97,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.7972811210001964,
+    "seconds": 0.7929380739988119,
     "table_time": 5.340000000000118,
     "resting": {
      "0": [
@@ -132,7 +132,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.43197905299894046,
+    "seconds": 0.42838162900079624,
     "table_time": 6.584000000000533,
     "resting": {
      "0": [
@@ -168,7 +168,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.34493891700003587,
+    "seconds": 0.34382593899863423,
     "table_time": 3.839999999999688,
     "resting": {
      "0": [
@@ -206,7 +206,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.9981446139991021,
+    "seconds": 0.989309962002153,
     "table_time": 6.760000000000592,
     "resting": {
      "0": [
@@ -256,7 +256,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.730105384998751,
+    "seconds": 1.7162420860004204,
     "table_time": 6.540000000000519,
     "resting": {
      "0": [
@@ -299,7 +299,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.37644376499883947,
+    "seconds": 0.3699681469988718,
     "table_time": 5.792000000000269,
     "resting": {
      "0": [
@@ -330,7 +330,7 @@
     "cue_elevation": 0.12
    },
    "reference": {
-    "seconds": 0.31707725599881087,
+    "seconds": 0.3157155219996639,
     "table_time": 4.819999999999944,
     "resting": {
      "0": [
@@ -366,7 +366,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.938967860000048,
+    "seconds": 0.9248291659969254,
     "table_time": 6.212000000000409,
     "resting": {
      "0": [
@@ -421,7 +421,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.678093638000064,
+    "seconds": 1.6592012889996113,
     "table_time": 5.288000000000101,
     "resting": {
      "0": [
@@ -483,7 +483,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.4569774770006916,
+    "seconds": 1.4334922439993534,
     "table_time": 5.73600000000025,
     "resting": {
      "13": [
@@ -534,7 +534,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.013280171999213053,
+    "seconds": 0.012941044999024598,
     "table_time": 0.06800000000000005,
     "resting": {
      "5": [
@@ -576,7 +576,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.7139131280000584,
+    "seconds": 0.7067292499996256,
     "table_time": 4.891999999999968,
     "resting": {
      "0": [
@@ -621,7 +621,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.1943398500006879,
+    "seconds": 1.1776077709982928,
     "table_time": 5.880000000000298,
     "resting": {
      "0": [
@@ -680,7 +680,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.11952487500093412,
+    "seconds": 0.11803171200153884,
     "table_time": 0.3840000000000003,
     "resting": {
      "13": [
@@ -735,7 +735,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.9504455919995962,
+    "seconds": 0.9378985090006609,
     "table_time": 4.659999999999891,
     "resting": {
      "0": [
@@ -789,7 +789,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.5821508330009237,
+    "seconds": 1.562542730000132,
     "table_time": 6.148000000000388,
     "resting": {
      "0": [
@@ -837,7 +837,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.6900826490000327,
+    "seconds": 0.6836985910013027,
     "table_time": 4.719999999999911,
     "resting": {
      "0": [
@@ -892,7 +892,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.6041213480002625,
+    "seconds": 1.5902938889994402,
     "table_time": 5.872000000000296,
     "resting": {
      "12": [
@@ -952,7 +952,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.922077478000574,
+    "seconds": 0.9044981340011873,
     "table_time": 3.5559999999997194,
     "resting": {
      "0": [
@@ -1010,7 +1010,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.027238185999522102,
+    "seconds": 0.026563448998786043,
     "table_time": 0.10800000000000008,
     "resting": {
      "1": [
@@ -1066,7 +1066,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.21626352300154394,
+    "seconds": 0.21294574800049304,
     "table_time": 0.8320000000000006,
     "resting": {
      "10": [
@@ -1117,7 +1117,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.3480478950004908,
+    "seconds": 1.3294139640020148,
     "table_time": 6.6560000000005575,
     "resting": {
      "0": [
@@ -1166,7 +1166,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.08662675699997635,
+    "seconds": 0.08596602000034181,
     "table_time": 0.4280000000000003,
     "resting": {
      "2": [
@@ -1223,7 +1223,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.8907319580011972,
+    "seconds": 1.8713056729975506,
     "table_time": 5.936000000000317,
     "resting": {
      "0": [
@@ -1280,7 +1280,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.9127183439995861,
+    "seconds": 0.8977327360007621,
     "table_time": 4.495999999999836,
     "resting": {
      "0": [
@@ -1334,7 +1334,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.2562345059996005,
+    "seconds": 1.2415790459999698,
     "table_time": 4.879999999999964,
     "resting": {
      "0": [
@@ -1392,7 +1392,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.016322704999765847,
+    "seconds": 0.016000882002117578,
     "table_time": 0.06400000000000004,
     "resting": {
      "3": [
@@ -1438,7 +1438,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.04979565299981914,
+    "seconds": 0.04948748300012085,
     "table_time": 0.34800000000000025,
     "resting": {
      "7": [
@@ -1476,7 +1476,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.8568564829984098,
+    "seconds": 0.8518519210010709,
     "table_time": 5.888000000000301,
     "resting": {
      "0": [
@@ -1521,7 +1521,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 0.9799830379997729,
+    "seconds": 0.9728746459986723,
     "table_time": 4.699999999999904,
     "resting": {
      "0": [
@@ -1575,7 +1575,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 1.0319368460004625,
+    "seconds": 1.0282745219992648,
     "table_time": 4.02799999999968,
     "resting": {
      "0": [
@@ -1693,7 +1693,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 5.598706188999131,
+    "seconds": 5.561449918001017,
     "table_time": 6.060000000000358,
     "resting": {
      "0": [
@@ -1857,7 +1857,7 @@
     "cue_elevation": 0.0
    },
    "reference": {
-    "seconds": 6.67715447000046,
+    "seconds": 6.635690777999116,
     "table_time": 7.076000000000698,
     "resting": {
      "0": [

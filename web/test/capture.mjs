@@ -95,6 +95,48 @@ const AIM_AT_BEST_POT = () => {
   return true;
 };
 
+/**
+ * Aim down the longest clear line on the table.
+ *
+ * The inspector's whole point is the slip-to-roll handover landing on 5/7·v₀,
+ * and it withdraws that prediction the moment the ball hits something first.
+ * Whether a game shot happens to be clean is luck, so the still is taken after
+ * a shot chosen to be one.
+ */
+const AIM_INTO_OPEN_SPACE = () => {
+  const s = window.cueai.state;
+  const cue = s.balls.find((b) => b.number === 0);
+  const R = 0.028575;
+  let best = null;
+  for (let i = 0; i < 720; i++) {
+    const angle = (i / 720) * 2 * Math.PI;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    // Distance to the cushion along this heading.
+    let clear = Infinity;
+    for (const [d, lo, hi] of [
+      [dx, R - cue.x, s.table.length - R - cue.x],
+      [dy, R - cue.y, s.table.width - R - cue.y],
+    ]) {
+      if (Math.abs(d) < 1e-9) continue;
+      clear = Math.min(clear, (d > 0 ? hi : lo) / d);
+    }
+    for (const b of s.balls) {
+      if (b.pocketed || b.number === 0) continue;
+      const along = (b.x - cue.x) * dx + (b.y - cue.y) * dy;
+      if (along <= 0) continue;
+      const off = Math.abs((b.x - cue.x) * dy - (b.y - cue.y) * dx);
+      if (off < 2 * R) clear = Math.min(clear, along);
+    }
+    if (!best || clear > best.clear) best = { clear, angle };
+  }
+  window.cueai.aim(best.angle);
+  // Enough to slide for a visible fraction of a second, not enough to reach
+  // the far rail before it starts rolling.
+  window.cueai.setPower(0.32);
+  return best.clear;
+};
+
 async function settle(page, timeout = 45000) {
   await page.waitForFunction(() => ["aim", "placing", "over"].includes(window.cueai.mode), {
     timeout,
@@ -177,8 +219,15 @@ async function main() {
     await (await page.$(".stage")).screenshot({ path: path.join(out, "web_game.png") });
     await (await page.$(".table-shell")).screenshot({ path: path.join(out, "web_table.png") });
     const panels = await page.$$("aside .panel");
-    await panels[1].screenshot({ path: path.join(out, "web_inspector.png") });
     await panels[2].screenshot({ path: path.join(out, "web_bot.png") });
+
+    // The inspector still gets a shot picked for it: see AIM_INTO_OPEN_SPACE.
+    if (await page.evaluate(() => window.cueai.mode === "aim")) {
+      await page.evaluate(AIM_INTO_OPEN_SPACE);
+      await page.evaluate(() => window.cueai.shoot());
+      await settle(page);
+    }
+    await panels[1].screenshot({ path: path.join(out, "web_inspector.png") });
     await page.evaluate(() => document.getElementById("how").scrollIntoView());
     await new Promise((r) => setTimeout(r, 250));
     await (await page.$("#how")).screenshot({ path: path.join(out, "web_explainer.png") });
