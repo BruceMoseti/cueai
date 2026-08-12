@@ -746,6 +746,28 @@ window.cueai = {
   get history() {
     return history;
   },
+  get aimAngle() {
+    return aimAngle;
+  },
+  get power() {
+    return power;
+  },
+  get spin() {
+    return { ...spin };
+  },
+  /**
+   * Table metres to viewport pixels. `web/test/input.mjs` needs this to put a
+   * real cursor on a particular ball, which is the only way to test the
+   * pointer handling rather than the functions underneath it.
+   */
+  toClient(x, y) {
+    const rect = ui.canvas.getBoundingClientRect();
+    const [px, py] = renderer.toCanvas(x, y);
+    return {
+      x: rect.left + (px / ui.canvas.width) * rect.width,
+      y: rect.top + (py / ui.canvas.height) * rect.height,
+    };
+  },
   shoot: playerShoot,
   newGame,
   place(x, y) {

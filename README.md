@@ -110,8 +110,18 @@ if the page and the measurements disagree.
 ```bash
 make play      # serve it at http://localhost:8123
 make web       # parity against Python, then 20 headless bot-vs-bot games
-make browser   # drive the real page in Chrome and play two games end to end
+make browser   # play two games in Chrome, then 15 real-cursor interaction checks
 ```
+
+That last one is worth a sentence, because it is the layer most browser tests
+skip. Calling the page's own functions proves the modules wire together; it says
+nothing about pointer capture, the drag threshold that separates lining a shot
+up from playing it, or which element owns the spacebar. `web/test/input.mjs`
+moves an actual cursor and presses actual keys, and asserts the promises the
+interface makes to a player: a quick click does not shoot, drawing the cue back
+sets the power without disturbing the aim, shift eases the aim to within a
+hundredth of a degree, the spin widget clamps at the miscue limit, and a
+dropdown that has focus keeps its own spacebar.
 
 ---
 
@@ -420,6 +430,7 @@ web/                 the playable table: dependency-free ES modules
     parity.mjs      replays the Python reference shots, compares endpoints
     selfplay.mjs    headless bot-against-bot games, every rule branch
     browser.mjs     drives the real page in Chrome, fails on console errors
+    input.mjs       plays with a real cursor and keyboard, not the test seam
     capture.mjs     records the screenshots and the clip in this README
 
 tests/

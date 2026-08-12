@@ -1,5 +1,5 @@
 .PHONY: help setup test lint typecheck check train bench figures facts api ui play \
-        parity parity-check selfplay browser capture web clean all
+        parity parity-check selfplay browser input capture web clean all
 .DEFAULT_GOAL := help
 
 PY ?= python3
@@ -41,6 +41,7 @@ selfplay:  ## Play the bot against itself headlessly, exercising every rule
 
 browser:  ## Load the page in Chrome and play a game (needs puppeteer-core)
 	$(NODE) web/test/browser.mjs --url http://localhost:$(PORT)/index.html --games 2
+	$(NODE) web/test/input.mjs --url http://localhost:$(PORT)/index.html
 
 capture:  ## Re-record the screenshots and the clip in the README
 	$(NODE) web/test/capture.mjs --url http://localhost:$(PORT)/index.html

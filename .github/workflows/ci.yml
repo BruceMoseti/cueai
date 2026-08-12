@@ -79,6 +79,12 @@ jobs:
           npx --yes wait-on http://localhost:8123/index.html
           node web/test/browser.mjs --url http://localhost:8123/index.html --games 1
 
+      # The layer above: pointer capture, the drag threshold, and which element
+      # owns the spacebar. Driven with a real cursor, because calling the
+      # handlers directly is exactly what would miss a regression here.
+      - name: Drive the page with a real cursor and keyboard
+        run: node web/test/input.mjs --url http://localhost:8123/index.html
+
   pipeline:
     # Proves the data -> train -> export -> serve path still works end to end,
     # on a dataset small enough to finish in a couple of minutes.
