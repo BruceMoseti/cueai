@@ -440,6 +440,11 @@ button.primary:hover:not(:disabled) {
 .state-chip.stationary {
   color: var(--ink-faint);
 }
+.state-chip.pocketed {
+  color: var(--warn);
+  border-color: #6b3a22;
+  background: #2a1a13;
+}
 
 #trace {
   display: block;

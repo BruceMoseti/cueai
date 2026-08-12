@@ -40,6 +40,7 @@ export class Inspector {
     this.contactAt = null;
     this.contactKind = null;
     this.closed = false;
+    this.pocketed = false;
     this.restingSince = null;
     this.lastSampleAt = -Infinity;
     this.peak = 1;
@@ -57,7 +58,15 @@ export class Inspector {
    * rather than of the frame rate.
    */
   sample(cue, tableTime, collisions = 0, cushions = 0) {
-    if (this.closed || !cue || cue.pocketed) return;
+    if (this.closed || !cue) return;
+    // A scratch ends the trace mid-flight. Recording that it did is the
+    // difference between a curve that stops and a curve that stops for a
+    // reason, and the panel says which in the legend.
+    if (cue.pocketed) {
+      this.pocketed = true;
+      this.closed = true;
+      return;
+    }
 
     const v = speed(cue);
     if (v > this.peak) this.peak = v;
@@ -125,7 +134,7 @@ export class Inspector {
     const v = live ? speed(cue) : 0;
     const [ux, uy] = live ? slipVelocity(cue) : [0, 0];
     const u = Math.hypot(ux, uy);
-    const state = live ? motionState(cue) : "stationary";
+    const state = live ? motionState(cue) : cue && cue.pocketed ? "pocketed" : "stationary";
 
     this.chip.textContent = state.toUpperCase();
     this.chip.className = `state-chip ${state}`;
@@ -155,6 +164,11 @@ export class Inspector {
     } else if (this.contactAt !== null) {
       parts.push(
         `<span style="color:var(--ink-faint)">${this.contactKind} before it finished sliding, so 5/7·v₀ does not apply</span>`
+      );
+    }
+    if (this.pocketed) {
+      parts.push(
+        `<span style="color:var(--ink-faint)">the cue ball dropped, so the trace ends where it did</span>`
       );
     }
     if (this.trace.length > 1) {
@@ -222,6 +236,9 @@ export class Inspector {
     }
 
     // The predicted rolling speed, which the measured curve should settle onto.
+    // Drawn only over the stretch it is a prediction about: once the ball has
+    // hit something, its speed is that impact's business, and a line carried on
+    // past the collision invites the reader to compare two unrelated numbers.
     if (this.predictionApplies()) {
       const y = py(this.launchSpeed * ROLL_FRACTION);
       ctx.strokeStyle = "rgba(74,168,255,0.65)";
@@ -229,7 +246,7 @@ export class Inspector {
       ctx.lineWidth = 1 * dpr;
       ctx.beginPath();
       ctx.moveTo(x0, y);
-      ctx.lineTo(w - pad, y);
+      ctx.lineTo(this.contactAt === null ? w - pad : px(this.contactAt), y);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -251,39 +268,58 @@ export class Inspector {
     line("u", "#ffd479", 1.3);
     line("v", "#3fb950", 1.7);
 
-    const marker = (t, label, colour, labelTop) => {
-      const x = px(t);
-      ctx.strokeStyle = colour;
+    // The first text line belongs to the speed scale, so the event labels
+    // start below it: the handover happens early in the shot and its label
+    // would otherwise be written straight through the axis maximum. Naming the
+    // collision matters for the same reason — the cliff in the green curve
+    // otherwise reads as the model losing energy for nothing.
+    const markers = [];
+    if (this.transitionAt) {
+      markers.push({
+        x: px(this.transitionAt.t),
+        label: `rolls at ${this.transitionAt.v.toFixed(2)} m/s`,
+        colour: "rgba(230,237,243,0.8)",
+        labelTop: top + 12 * dpr,
+      });
+    }
+    if (this.contactAt !== null) {
+      markers.push({
+        x: px(this.contactAt),
+        label: this.contactKind,
+        colour: "rgba(240,136,62,0.9)",
+        labelTop: top + 24 * dpr,
+      });
+    }
+
+    for (const m of markers) {
+      ctx.strokeStyle = m.colour;
       ctx.lineWidth = 1 * dpr;
       ctx.beginPath();
       // Stops short of the top so it does not rule through the speed scale,
       // which the handover marker otherwise does on almost every shot.
-      ctx.moveTo(x, top + 10 * dpr);
-      ctx.lineTo(x, bottom);
+      ctx.moveTo(m.x, top + 10 * dpr);
+      ctx.lineTo(m.x, bottom);
       ctx.stroke();
-      ctx.fillStyle = colour;
-      ctx.font = `${9.5 * dpr}px ui-monospace, Menlo, monospace`;
-      const right = x > w * 0.55;
-      ctx.textAlign = right ? "right" : "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(label, x + (right ? -4 * dpr : 4 * dpr), labelTop);
-    };
-
-    // The first text line belongs to the speed scale, so the event labels
-    // start below it: the handover happens early in the shot and its label
-    // would otherwise be written straight through the axis maximum.
-    if (this.transitionAt) {
-      marker(
-        this.transitionAt.t,
-        `rolls at ${this.transitionAt.v.toFixed(2)} m/s`,
-        "rgba(230,237,243,0.8)",
-        top + 12 * dpr
-      );
     }
-    // Naming the collision explains the cliff in the green curve, which
-    // otherwise reads as the model losing energy for no reason.
-    if (this.contactAt !== null) {
-      marker(this.contactAt, this.contactKind, "rgba(240,136,62,0.9)", top + 24 * dpr);
+
+    // Labels go on after every line is down, on a patch of background. On a
+    // shot that starts rolling and then finds a rail the two events are a few
+    // hundredths of a second apart, and the second line drawn through the
+    // first label is precisely where the plot needs to be readable.
+    ctx.font = `${9.5 * dpr}px ui-monospace, Menlo, monospace`;
+    ctx.textBaseline = "top";
+    for (const m of markers) {
+      const gap = 4 * dpr;
+      const textW = ctx.measureText(m.label).width;
+      const right = m.x > w * 0.55 && m.x - gap - textW > pad;
+      const left = right ? m.x - gap - textW : m.x + gap;
+      // Translucent, not opaque: a curve dimmed behind a label reads as being
+      // behind it, where a curve with a rectangle cut out of it reads as a bug.
+      ctx.fillStyle = "rgba(13,19,25,0.76)";
+      ctx.fillRect(left - 2 * dpr, m.labelTop - 1 * dpr, textW + 4 * dpr, 11 * dpr);
+      ctx.fillStyle = m.colour;
+      ctx.textAlign = "left";
+      ctx.fillText(m.label, left, m.labelTop);
     }
 
     this.drawTimeAxis(ctx, { axis, px, x0, xSplit, w, pad, bottom, top, dpr, vMax });
