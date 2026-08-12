@@ -33,6 +33,8 @@ shot is judged by a full eight-ball rules engine, and the log under the table
 keeps its reasoning on screen: which ball was struck first, how many rails were
 found afterwards, and which of those facts made a shot a foul.
 
+![The whole interface: table, live cue-ball trace, the bot's report and the shot log](docs/assets/web_game.png)
+
 The browser is not running a lookalike physics engine. `web/js/physics.js` is a
 hand port of `src/cueai/physics/`, and the port is measured rather than
 asserted: `scripts/export_parity_cases.py` runs 35 shots through the Python

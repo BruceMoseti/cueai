@@ -282,14 +282,10 @@ async function main() {
     await new Promise((r) => setTimeout(r, 400));
 
     await (await page.$(".stage")).screenshot({ path: path.join(out, "web_game.png") });
-    await (await page.$(".table-shell")).screenshot({ path: path.join(out, "web_table.png") });
     const panels = await page.$$("aside .panel");
     await panels[2].screenshot({ path: path.join(out, "web_bot.png") });
 
     await captureInspector(page, panels[1], path.join(out, "web_inspector.png"));
-    await page.evaluate(() => document.getElementById("how").scrollIntoView());
-    await new Promise((r) => setTimeout(r, 250));
-    await (await page.$("#how")).screenshot({ path: path.join(out, "web_explainer.png") });
 
     console.log(`wrote stills to ${out}/`);
   } finally {
