@@ -231,6 +231,74 @@ def test_draw_stun_follow_are_correctly_ordered() -> None:
     assert endpoints["draw"] < endpoints["stun"] < endpoints["follow"]
 
 
+@pytest.mark.parametrize(
+    "label,angle_deg,obj_pos,tolerance_m",
+    [
+        ("full ball", 0.0, (1.4, 0.635), 0.01),
+        # A thin cut amplifies the contact geometry, so it is the worst case for
+        # the timestep and gets the looser bound.
+        ("half ball", 2.0, (1.5, 0.66), 0.06),
+    ],
+)
+def test_training_timestep_is_converged(
+    label: str, angle_deg: float, obj_pos: tuple[float, float], tolerance_m: float
+) -> None:
+    """
+    Labels are generated at 2 ms, so halving the step must barely move the answer.
+
+    Without this bound the reported model errors could be measuring the
+    integrator's discretisation rather than the model, and no amount of training
+    would fix it. See docs/VALIDATION.md for the measured values.
+    """
+    table = TableParams(**SMOOTH_CLOTH)
+    shot = ShotParams(speed=3.0 if angle_deg else 2.5, angle=float(np.radians(angle_deg)))
+    cue_pos = (0.6, 0.60) if angle_deg else (0.6, 0.635)
+
+    endpoints = {}
+    for dt in (2e-3, 1e-3):
+        result = Simulator(table=table, dt=dt, max_time=8.0).simulate_shot(
+            shot, cue_pos=cue_pos, obj_pos=obj_pos
+        )
+        endpoints[dt] = (result.endpoints[0].copy(), result.endpoints[1].copy())
+        assert result.collision_events > 0, "the shot must actually make contact"
+
+    for index, ball in enumerate(("cue", "object")):
+        gap = float(np.linalg.norm(endpoints[2e-3][index] - endpoints[1e-3][index]))
+        assert gap < tolerance_m, f"{label} {ball} ball moved {gap * 1000:.0f} mm"
+
+
+def test_ghost_ball_geometry_pots_and_half_a_degree_misses() -> None:
+    """
+    Contact geometry against its closed form, and the tolerance that follows.
+
+    Aiming at the ghost-ball point — the object ball's centre pulled one diameter
+    back along the line to the pocket — must pot the ball. Half a degree off must
+    not, which is the measurement behind the claim that potting needs finer aim
+    than the surrogate can resolve.
+    """
+    table = TableParams(**SMOOTH_CLOTH)
+    sim = Simulator(table=table, dt=2e-3, max_time=8.0)
+    cue_pos, obj_pos = (0.60, 0.35), (1.70, 0.75)
+    pocket = np.array([table.length, table.width])
+
+    obj = np.asarray(obj_pos)
+    to_pocket = (pocket - obj) / np.linalg.norm(pocket - obj)
+    ghost = obj - 2 * sim.ball_params.radius * to_pocket
+    aim = float(np.arctan2(*(ghost - np.asarray(cue_pos))[::-1]))
+
+    def pots(angle: float) -> bool:
+        result = sim.simulate_shot(
+            ShotParams(speed=2.5, angle=angle), cue_pos=cue_pos, obj_pos=obj_pos
+        )
+        return bool(result.pocketed[1]) and not result.pocketed[0]
+
+    assert pots(aim), "the closed-form ghost-ball line must pot the object ball"
+    for offset_deg in (-0.5, 0.5):
+        assert not pots(aim + float(np.radians(offset_deg))), (
+            f"{offset_deg:+.1f}° off the ghost-ball line should miss"
+        )
+
+
 def test_analytic_baseline_tracks_simulator_on_open_table() -> None:
     """The closed-form baseline agrees with the simulator when no rail is hit."""
     table = TableParams(mu_slide=0.2, mu_roll=0.05, **SMOOTH_CLOTH)

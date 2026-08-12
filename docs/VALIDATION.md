@@ -44,6 +44,22 @@ because friction both slows the ball and spins it up:
 | Energy in any contact | never increases | — | holds |
 | Sidespin on a rolling ball | no lateral deflection | 1e-9 m | exact |
 | Draw / stun / follow | ordered, draw ends behind contact | — | holds |
+| Ghost-ball aim line | pots the ball; ±0.5° misses | — | holds |
+| Timestep convergence, full-ball contact | 2 ms vs 1 ms | 10 mm | 3 mm |
+| Timestep convergence, thin cut | 2 ms vs 1 ms | 60 mm | 46 mm |
+
+## Is the reference converged?
+
+Worth asking, because everything downstream is measured against it. Training
+labels are generated at a 2 ms step, so if that step were too coarse the reported
+model errors would partly be measuring the integrator.
+
+Halving the step moves the resting position by about 3 mm on a full-ball contact
+and 46 mm on a thin cut, the thin cut being the worst case because a small change
+in contact geometry is amplified into a large change in direction. Quartering it,
+to 0.5 ms, moves free-ball endpoints by a median of 0.8 mm and at most 19 mm.
+Against the 100 mm error the surrogate achieves on its best shots, discretisation
+is a real but sub-dominant term — and it is bounded by a test rather than assumed.
 
 The tip offset result is worth spelling out because it is easy to get wrong. A
 horizontal impulse applied a distance `d = f·R` off centre gives `Δv = J/m` and
