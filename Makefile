@@ -14,7 +14,7 @@ setup:  ## Install the package with dev extras
 test:  ## Run the test suite
 	$(PY) -m pytest tests/ -q
 
-lint:  ## Check formatting and style
+lint:  ## Check style
 	$(PY) -m ruff check src tests scripts
 
 typecheck:  ## Run static type checks

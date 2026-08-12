@@ -339,7 +339,7 @@ class MainWindow(QMainWindow):
         self.noise.setRange(0, 0.08)
         self.noise.setValue(0.025)
         self.noise.setSingleStep(0.005)
-        self.use_ml = QCheckBox("ML residual fusion")
+        self.use_ml = QCheckBox("Compare fast prediction")
         self.use_ml.setChecked(True)
         self.show_paths = QCheckBox("Show trails")
         self.show_paths.setChecked(True)
@@ -430,12 +430,20 @@ class MainWindow(QMainWindow):
 
         sunk = [k for k, v in result["pocketed"].items() if v and k != "0"]
         cue_scratch = bool(result["pocketed"].get("0"))
-        ml = "ON" if result["ml_loaded"] and self.use_ml.isChecked() else "OFF"
-        self.status.setText(
-            f"ML {ml} · collisions≈{result.get('collisions', 0)} · "
+        timing = result.get("timing_ms", {})
+        gap = result.get("agreement", {}).get("cue_gap_m")
+        summary = (
+            f"simulated in {timing.get('simulator', 0.0) / 1000:.1f} s · "
+            f"collisions≈{result.get('collisions', 0)} · cushions≈{result.get('cushions', 0)} · "
             f"pocketed {len(sunk)} {sunk[:6]}{'…' if len(sunk) > 6 else ''}"
             + (" · SCRATCH" if cue_scratch else "")
         )
+        if self.use_ml.isChecked() and gap is not None:
+            summary += (
+                f"\nfast prediction took {timing.get('fast', 0.0):.2f} ms and landed "
+                f"{gap * 1000:.0f} mm from the simulated cue ball"
+            )
+        self.status.setText(summary)
 
 
 def main() -> None:

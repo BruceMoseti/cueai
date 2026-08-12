@@ -65,6 +65,18 @@ def measure_latency(repeats: int) -> dict[str, dict[str, float]]:
         lambda: predict_endpoint(shot, cue, table), repeats
     )
 
+    gbm_path = ROOT / "models" / "gbm_baseline.joblib"
+    if gbm_path.exists():
+        import joblib
+
+        from cueai.ml.features import build_features
+
+        bundle = joblib.load(gbm_path)
+        row = build_features(shot, cue, (1.4, 0.7), table)[None, :]
+        results["gradient_boosting"] = time_calls(
+            lambda: bundle["model"].predict(bundle["scaler"].transform(row)), repeats
+        )
+
     predictor = TrajectoryPredictor(model_dir=ROOT / "models")
     if predictor.ready:
         results["surrogate_" + predictor.backend] = time_calls(
@@ -75,15 +87,27 @@ def measure_latency(repeats: int) -> dict[str, dict[str, float]]:
             predictor.feature_vector(shot, cue, (1.4, 0.7), table)[None, :], 1024, axis=0
         )
         batched = time_calls(lambda: predictor.residual_batch(batch), max(repeats // 20, 5))
-        results["surrogate_batch1024"] = batched
-        results["surrogate_batch1024"]["per_shot_ms"] = batched["mean_ms"] / 1024
+        results["cuenet_batch1024"] = {
+            key: value / 1024 if key.endswith("_ms") else value
+            for key, value in batched.items()
+        }
 
+    reference = results["simulator_full_rack"]["mean_ms"]
     for name, entry in results.items():
         if name != "simulator_full_rack":
-            entry["speedup_vs_full_rack"] = (
-                results["simulator_full_rack"]["mean_ms"] / entry["mean_ms"]
-            )
+            entry["speedup_vs_full_rack"] = reference / entry["mean_ms"]
     return results
+
+
+def format_duration(milliseconds: float) -> str:
+    """Human-readable across the five orders of magnitude this table spans."""
+    if milliseconds >= 1000:
+        return f"{milliseconds / 1000:,.1f} s"
+    if milliseconds >= 1:
+        return f"{milliseconds:.1f} ms"
+    if milliseconds >= 0.01:
+        return f"{milliseconds:.3f} ms"
+    return f"{milliseconds * 1000:.1f} us"
 
 
 def render_markdown(latency: dict, metrics: dict | None) -> str:
@@ -91,9 +115,10 @@ def render_markdown(latency: dict, metrics: dict | None) -> str:
         "simulator_full_rack": "Numerical simulator, 16-ball rack",
         "simulator_two_ball": "Numerical simulator, cue + object ball",
         "closed_form": "Closed-form solver (no ML)",
+        "gradient_boosting": "Gradient boosting on the same features",
         "surrogate_torch": "Closed form + CueNet residual (PyTorch)",
         "surrogate_onnx": "Closed form + CueNet residual (ONNX Runtime)",
-        "surrogate_batch1024": "CueNet residual, batch of 1024 (per shot)",
+        "cuenet_batch1024": "CueNet forward pass only, batch of 1024 (per shot)",
     }
     lines = [
         "# Benchmarks",
@@ -109,11 +134,13 @@ def render_markdown(latency: dict, metrics: dict | None) -> str:
         "|---|---:|---:|---:|---:|",
     ]
     for key, entry in latency.items():
-        mean = entry.get("per_shot_ms", entry["mean_ms"])
-        speedup = entry.get("speedup_vs_full_rack")
+        # The batched row times the network alone, so it is not a like-for-like
+        # end-to-end prediction and does not get a speedup figure.
+        speedup = entry.get("speedup_vs_full_rack") if "batch" not in key else None
         lines.append(
-            f"| {labels.get(key, key)} | {mean:.3f} ms | {entry['median_ms']:.3f} ms | "
-            f"{entry['p95_ms']:.3f} ms | {f'{speedup:,.0f}x' if speedup else '—'} |"
+            f"| {labels.get(key, key)} | {format_duration(entry['mean_ms'])} | "
+            f"{format_duration(entry['median_ms'])} | {format_duration(entry['p95_ms'])} | "
+            f"{f'{speedup:,.0f}x' if speedup else '—'} |"
         )
 
     if metrics:

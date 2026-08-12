@@ -1,57 +1,242 @@
 # CueAI
 
-Physics-informed AI simulation for billiards that combines classical mechanics with
-regression models to predict realistic ball trajectories from spin, launch angle,
-velocity, cushion interactions, and table surface variations.
+[![CI](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml/badge.svg)](https://github.com/BruceMoseti/cueai/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-| Layer | Tech |
-|-------|------|
-| Physics core | C++ (optional) + Python NumPy simulator |
-| ML | PyTorch → ONNX, Scikit-learn baselines |
-| Data | Pandas, NumPy synthetic shot datasets |
-| Vision | OpenCV table / cue overlay helpers |
-| Backend | FastAPI |
-| Frontend | PyQt6 interactive table |
+**A physics simulator for billiards, a closed-form solution that replaces it, and
+a learned model that corrects what the closed form misses — roughly 60,000x
+faster than integration, with the accuracy measured and the failure mode stated.**
 
-## Quick start
+Predicting where the balls come to rest costs **about 37 seconds per rack shot**
+by numerical integration. This project reduces that to **0.6 ms** with a mean
+error of **97 mm for direct shots** on a 2.54 x 1.27 m table, and shows exactly
+where the approach stops working rather than averaging it away.
+
+Every number in this README is produced by a script in this repository and
+regenerated with `make all`.
+
+![Draw, stun and follow from the same stroke speed](docs/assets/spin_control.png)
+
+*One stroke speed, three cue tip heights. Backspin brings the cue ball back
+behind where it started, a centre-ball hit stops it dead at the object ball,
+topspin sends it through. All three come out of the cloth model, not from
+special-casing.*
+
+---
+
+## Results
+
+Held-out test set of 4,000 shots from 20,000 simulated shots. Error is the
+distance between the predicted and the simulated resting position, averaged over
+the cue ball and the object ball. Full tables in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
+| Method | Cost per shot | Mean error | Direct shots (no cushion) | R² |
+|---|---:|---:|---:|---:|
+| Numerical simulator, 16 balls | 36.8 s | — (ground truth) | — | — |
+| Closed-form solver, no fitting | 0.26 ms | 494 mm | 114 mm | 0.01 |
+| Gradient boosting on the same features | 2.6 ms | 385 mm | 160 mm | 0.51 |
+| **Closed form + learned residual** | **0.63 ms** | **378 mm** | **97 mm** | 0.42 |
+
+The learned residual beats both the physics baseline and a conventional
+regressor, is four times cheaper to evaluate than the boosted trees, and is the
+only one of the three that improves on the physics for the shots where physics is
+nearly sufficient.
+
+### Where it stops working, and why that is the interesting part
+
+![Prediction error by cushion contacts](docs/assets/accuracy.png)
+
+A resting position is a smooth function of the shot until the ball starts
+ricocheting between cushions. After two or three rail contacts, a millimetre of
+cue placement moves the outcome by a table length. The error breakdown above is
+published instead of hidden inside a single average, because "this model predicts
+direct and one-rail shots to about 10 cm and multi-rail scatter not at all" is a
+usable statement, while "378 mm mean error" is not.
+
+### Speed
+
+![Cost of one shot prediction](docs/assets/latency.png)
+
+## The physics is verified, not asserted
+
+![Simulator versus closed form](docs/assets/validation.png)
+
+The simulator is tested against closed-form solutions and conservation laws, not
+against its own earlier output. A struck ball must begin rolling at exactly
+`5/7` of its launch speed after sliding `12v₀²/(49 μ_s g)`; frictional collisions
+must conserve momentum to machine precision; no contact may create energy. See
+[docs/VALIDATION.md](docs/VALIDATION.md) for the full table of properties,
+tolerances and measured deviations — and for the list of effects deliberately not
+modelled, such as cue ball squirt and swerve.
+
+This mattered. The original implementation had the contact-point slip velocity
+and the friction torque in opposite handedness, so friction drove a struck ball
+*away* from rolling: it slid until it stopped, the rolling speed was `0` instead
+of `5/7 v₀`, and stopping distances were four times short. Nothing in the code
+looked wrong. A closed-form comparison found it immediately.
+
+![16-ball break](docs/assets/break_shot.png)
+
+## Try it
 
 ```bash
-cd ~/Projects/cueai
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/BruceMoseti/cueai && cd cueai
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 
-# Generate data + train ML model
-python -m cueai.ml.train --n-samples 4000 --epochs 40
-
-# API server
-uvicorn cueai.api.main:app --reload --port 8000
-
-# Desktop UI
-python -m cueai.ui.app
+make test          # 36 tests, including the closed-form validation suite
+make all           # regenerate the dataset, model, benchmarks and figures
 ```
 
-## Architecture
+`make all` runs about 20 minutes end to end: simulating 20,000 shots takes most
+of it, in parallel across available cores.
 
-```
-Shot params (V, θ, spin ω, table μ)
-        │
-        ▼
-┌───────────────────┐     residual correction
-│ Physics simulator │ ──► ┌─────────────────┐
-│ (cloth, collide,  │     │ CueNet (PyTorch)│──► ONNX
-│  cushions)        │     └─────────────────┘
-└───────────────────┘              │
-        │                          ▼
-        └──────────► fused trajectory ──► API / PyQt UI
+### Serve predictions
+
+```bash
+make api           # http://localhost:8000/docs
 ```
 
-## Resume bullets (use the AI-focused version)
+```bash
+# Sub-millisecond estimate: closed form plus learned residual
+curl -s localhost:8000/predict/fast -H 'content-type: application/json' \
+  -d '{"speed": 2.2, "angle_deg": 8, "english_y": -0.3, "cue_x": 0.6, "cue_y": 0.6}'
 
-> Developed a physics-informed AI simulation for billiards that combines classical
-> mechanics with regression models to predict realistic ball trajectories based on
-> spin, launch angle, velocity, cushion interactions, and table surface variations.
+# Full simulation, with the fast estimate alongside and the gap between them
+curl -s localhost:8000/predict -H 'content-type: application/json' \
+  -d '{"speed": 2.2, "angle_deg": 8, "full_rack": false, "obj_x": 1.4, "obj_y": 0.7}'
+```
+
+### Interactive table
+
+```bash
+pip install -e ".[ui]"
+make ui
+```
+
+Drag balls, aim, shoot. Each rack shot runs the reference simulator, so expect a
+few seconds of thinking time — which is the entire motivation for the fast path.
+
+## How it works
+
+Three tiers, each with a different accuracy and cost, described in full in
+[docs/DESIGN.md](docs/DESIGN.md).
+
+**1. Numerical simulator.** Four-state cloth dynamics (sliding, rolling,
+spinning, stationary) integrated at 1 ms, frictional ball-ball impulses with spin
+transfer and throw, cushion rebound with speed-dependent restitution, pocket
+capture, and a spatially varying cloth friction field.
+
+**2. Closed-form solver.** No integration. While a ball slides, its slip velocity
+decays along a *fixed* direction, so the friction force is constant and the path
+is exactly a parabola of known duration. Rolling is a straight line. A shot
+becomes a handful of exactly solvable segments joined at cushions, where the
+normal velocity is damped while the spin term carries through. That last detail
+is what a plain mirror-reflection approximation gets wrong: it disagreed with the
+simulator by about a metre, where this solver lands within 114 mm on direct shots
+and 225 mm across one rail.
+
+**3. Learned residual.** A small MLP predicts the vector from the closed-form
+endpoint to the simulated one. Its output head starts at zero, so training begins
+from "trust the physics" and departs only where the data insists. Its inputs
+include the closed-form solver's own conclusions — predicted endpoint, expected
+cushion count, expected pot, ghost-ball contact geometry — which is what took the
+error on clean shots from 191 mm (worse than physics alone) to 97 mm.
+
+## What this demonstrates
+
+Billiards is the domain; the transferable content is below.
+
+**Surrogate modelling of an expensive simulator.** The pattern — establish a
+trusted reference, find the closed-form structure inside it, learn only the
+residual, and quantify the accuracy you traded for the speed — is the same one
+used for pricing engines that are too slow for intraday risk, finite-element
+models too slow for design loops, and any Monte Carlo where the inner loop is the
+bottleneck. The four orders of magnitude here come mostly from the closed form,
+not from the network, which is usually how it goes.
+
+**Validating against theory rather than against yourself.** A snapshot test
+would have locked in a sign error that made the central physics wrong. Closed-form
+references, conservation laws and analytic decay rates caught it in one run. The
+same discipline applies to any numerical pipeline: solve a special case exactly
+and check against it.
+
+**Knowing the limit of your own model.** The chaos analysis, the per-stratum
+error breakdown and the prediction-spread ratio exist so that a user knows which
+predictions to trust. A model that is confident everywhere and accurate in half
+the space is more dangerous than a slower one.
+
+**Model selection without leaking the test set.** Epochs are chosen on a
+validation split carved from the training data; the test split is scored once,
+after training. The GBM comparison uses the identical split.
+
+**Reproducibility as a property of the code.** Dataset generation is parallel and
+seeded per sample, so the data is byte-identical on 1 core or 32. Training and
+serving construct features through one function, and a test pins the two paths
+together, because train/serve skew degrades a model quietly instead of failing
+loudly.
+
+**Deployability.** The residual model exports to ONNX and runs through ONNX
+Runtime with no PyTorch in the serving path. PyQt and OpenCV are optional extras,
+so the package installs headless. CI lints, type-checks and tests on three Python
+versions, then runs the whole data to model to benchmark to figures pipeline and
+uploads the artefacts.
+
+## Repository map
+
+```
+src/cueai/
+  physics/
+    ball.py         four-state cloth dynamics for one ball
+    collisions.py   frictional ball-ball impulses, cushions, pockets
+    simulator.py    the 16-ball reference simulator
+    analytic.py     the closed-form solver and its derivations
+    rack.py         8-ball rack geometry and ball identities
+  ml/
+    dataset.py      parallel, per-sample-seeded shot generation
+    features.py     one feature path for training and serving
+    model.py        CueNet, zero-initialised residual head
+    train.py        training, baseline comparison, stratified evaluation
+    infer.py        predict_fast (0.58 ms) and predict (full simulation)
+  api/main.py       FastAPI service
+  ui/app.py         PyQt6 interactive table
+  vision/overlay.py OpenCV trajectory overlays
+
+tests/
+  test_validation.py  closed-form physics validation
+  test_features.py    train/serve feature consistency
+  test_physics.py     simulator behaviour
+  test_api.py         HTTP contract
+
+scripts/
+  benchmark.py      writes docs/BENCHMARKS.md
+  make_figures.py   writes docs/assets/*.png
+```
+
+## Limitations
+
+- Not calibrated against a real table. No measurements were taken, so the claim
+  is internal consistency with classical mechanics, not fidelity to specific
+  equipment. Cloth and cushion coefficients come from the published ranges.
+- Cue ball squirt and swerve are not modelled, so aiming advice would be
+  systematically off for heavy sidespin.
+- Multi-rail outcomes are not usefully predictable by any of the three methods
+  here, as measured above.
+- The reference simulator is straightforward Python. It is a definition of truth,
+  not a fast engine; the vectorisation work stopped once the hot loop was 6x
+  cheaper.
+
+## References
+
+The cloth and collision model follows the standard treatment in Ron Shepard's
+*Amateur Physics for the Amateur Pool Player*, Wayland Marlow's *The Physics of
+Pocket Billiards*, and David Alciatore's technical proofs; the four-state
+formulation matches the approach taken by
+[pooltool](https://github.com/ekiefl/pooltool). Coefficients are from the
+published ranges in those sources.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

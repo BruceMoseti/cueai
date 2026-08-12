@@ -228,14 +228,21 @@ def figure_latency(latency: dict) -> Path:
         "closed_form": "closed form",
         "surrogate_onnx": "closed form + CueNet (ONNX)",
         "surrogate_torch": "closed form + CueNet (PyTorch)",
-        "surrogate_batch1024": "CueNet, batched (per shot)",
+        "cuenet_batch1024": "CueNet forward pass, batched",
     }
     entries = [
-        (labels[key], value.get("per_shot_ms", value["mean_ms"]))
-        for key, value in latency.items()
-        if key in labels
+        (labels[key], value["mean_ms"]) for key, value in latency.items() if key in labels
     ]
     entries.sort(key=lambda item: item[1])
+
+    def label_time(milliseconds: float) -> str:
+        if milliseconds >= 1000:
+            return f"{milliseconds / 1000:,.1f} s"
+        if milliseconds >= 1:
+            return f"{milliseconds:.0f} ms"
+        if milliseconds >= 0.01:
+            return f"{milliseconds:.2f} ms"
+        return f"{milliseconds * 1000:.1f} us"
 
     fig, ax = plt.subplots(figsize=(7.2, 3.0))
     names = [name for name, _ in entries]
@@ -243,9 +250,9 @@ def figure_latency(latency: dict) -> Path:
     colours = [ACCENT if "CueNet" in name or "closed" in name else "#9aa4ad" for name in names]
     ax.barh(names, values, color=colours)
     ax.set_xscale("log")
-    ax.set_xlabel("milliseconds per shot (log scale)")
+    ax.set_xlabel("time per shot, log scale")
     for index, value in enumerate(values):
-        ax.text(value * 1.15, index, f"{value:.3g} ms", va="center", fontsize=8)
+        ax.text(value * 1.15, index, label_time(value), va="center", fontsize=8)
     ax.set_xlim(min(values) * 0.5, max(values) * 6)
     ax.set_title("Cost of one shot prediction", fontsize=10)
     ax.grid(axis="y", visible=False)
