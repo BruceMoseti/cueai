@@ -56,11 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # enablement turns Pages on for the repository if it is off, so the
-      # published link works without anyone visiting the settings page first.
+      # Publishing needs Pages switched on once, by hand, with Source set to
+      # "GitHub Actions" in Settings -> Pages. It cannot be automated from here:
+      # creating a Pages site needs administration:write, which a workflow token
+      # cannot be granted, so configure-pages fails with "Resource not
+      # accessible by integration" until the site exists. After that this step
+      # just reads the existing configuration on every run.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
