@@ -12,6 +12,17 @@
 
 export const G = 9.81;
 
+/**
+ * Two balls count as touching once their surfaces are inside this band.
+ *
+ * Mirrors `CONTACT_BAND` in `cueai/physics/collisions.py`, where the reasoning
+ * is written out: the value has to sit far above the floating-point noise in a
+ * position and far below anything physical, and it must not coincide with the
+ * gap balls are racked at, or which of a rack's thirty contacts exist becomes
+ * a question about rounding.
+ */
+export const CONTACT_BAND = 1e-5;
+
 export const BALL = Object.freeze({
   radius: 0.028575, // m, a 2 1/4 inch ball
   mass: 0.17, // kg
@@ -212,9 +223,20 @@ export function ballBallFriction(vRel, table) {
   return Math.min(0.25, Math.max(0.01, 0.5 * (base + table.muBall)));
 }
 
-/** Equal-mass frictional collision with spin transfer and throw. */
+/**
+ * Equal-mass frictional collision with spin transfer and throw.
+ *
+ * Returns what it did: `NOTHING`, `SEPARATED` when it only pushed overlapping
+ * balls apart, or `STRUCK` when an impulse was exchanged. The sweep below needs
+ * to tell those apart — a pass that only separated balls has still changed the
+ * problem — while the event counter only wants real hits.
+ */
+export const NOTHING = 0;
+export const SEPARATED = 1;
+export const STRUCK = 2;
+
 export function resolveBallBall(a, b, table) {
-  if (a.pocketed || b.pocketed) return false;
+  if (a.pocketed || b.pocketed) return NOTHING;
 
   const R = BALL.radius;
   const m = BALL.mass;
@@ -224,7 +246,7 @@ export function resolveBallBall(a, b, table) {
   const dy = b.y - a.y;
   const dist = Math.hypot(dx, dy);
   const minDist = 2 * R;
-  if (dist < 1e-12 || dist > minDist + 2e-4) return false;
+  if (dist < 1e-12 || dist > minDist + CONTACT_BAND) return NOTHING;
 
   const nx = dx / dist;
   const ny = dy / dist;
@@ -232,7 +254,7 @@ export function resolveBallBall(a, b, table) {
   // Spin contributes nothing along n, so the approach speed can be tested
   // before any impulse work. Balls resting in contact stop here.
   const vN = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
-  if (vN <= 1e-6 && overlap <= 0) return false;
+  if (vN <= 1e-6 && overlap <= 0) return NOTHING;
 
   if (overlap > 0) {
     a.x -= 0.5 * overlap * nx;
@@ -240,7 +262,7 @@ export function resolveBallBall(a, b, table) {
     b.x += 0.5 * overlap * nx;
     b.y += 0.5 * overlap * ny;
   }
-  if (vN <= 1e-6) return false; // separating or resting: position fixed only
+  if (vN <= 1e-6) return SEPARATED; // separating or resting: position fixed only
 
   // Contact-point relative velocity, including both spins.
   const raX = R * nx;
@@ -287,7 +309,7 @@ export function resolveBallBall(a, b, table) {
   // Residual vertical-axis coupling: cling and throw.
   a.wz += (0.15 * jT) / (I / R);
   b.wz -= (0.15 * jT) / (I / R);
-  return true;
+  return STRUCK;
 }
 
 /** Cushion bounce with friction, spin transfer, and corner dual-rail hits. */
@@ -382,7 +404,7 @@ export function checkPocket(b, table) {
  * A single pass cannot propagate an impulse through a packed rack, where one
  * contact pushes a ball into the next. Deepest overlaps are resolved first.
  */
-export function resolveAllBallCollisions(balls, table, events = null, passes = 20) {
+export function resolveAllBallCollisions(balls, table, events = null, passes = 24) {
   for (let pass = 0; pass < passes; pass++) {
     const active = [];
     for (let i = 0; i < balls.length; i++) if (!balls[i].pocketed) active.push(i);
@@ -394,16 +416,18 @@ export function resolveAllBallCollisions(balls, table, events = null, passes = 2
         const i = active[ai];
         const j = active[bi];
         const gap = Math.hypot(balls[j].x - balls[i].x, balls[j].y - balls[i].y) - 2 * BALL.radius;
-        if (gap <= 1e-4) pairs.push([gap, i, j]);
+        if (gap <= CONTACT_BAND) pairs.push([gap, i, j]);
       }
     }
-    // Matches the reference: only an empty candidate set ends the sweep. A pass
-    // that merely separates resting balls still has to be followed by another.
     if (pairs.length === 0) break;
     pairs.sort((p, q) => p[0] - q[0]);
+
+    let anyHit = false;
     for (const [, i, j] of pairs) {
-      if (!resolveBallBall(balls[i], balls[j], table)) continue;
-      if (!events) continue;
+      const outcome = resolveBallBall(balls[i], balls[j], table);
+      if (outcome === NOTHING) continue;
+      anyHit = true;
+      if (outcome !== STRUCK || !events) continue;
       events.collisions++;
       // The first object ball the cue touches decides whether the shot is legal.
       if (events.firstContact === null) {
@@ -411,6 +435,10 @@ export function resolveAllBallCollisions(balls, table, events = null, passes = 2
         else if (balls[j].number === 0) events.firstContact = balls[i].number;
       }
     }
+    // A pass that changed nothing hands the next one the same problem. This is
+    // convergence, not a budget, and it is what keeps a racked table — thirty
+    // resting contacts, every step — from paying for all the passes.
+    if (!anyHit) break;
   }
 }
 

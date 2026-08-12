@@ -70,7 +70,8 @@ export function rackOrder(seed = 7) {
 }
 
 export function trianglePositions(apex) {
-  const gap = 2 * BALL.radius + 1e-4;
+  // Racked balls touch; see `triangle_positions` in `cueai/physics/rack.py`.
+  const gap = 2 * BALL.radius;
   const spots = [];
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col <= row; col++) {

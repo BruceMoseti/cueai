@@ -69,7 +69,10 @@ def triangle_positions(apex: np.ndarray, R: float) -> list[np.ndarray]:
     15 tightly packed positions: row 0 has 1 ball (apex), … row 4 has 5.
     Oriented toward the head of the table (−x).
     """
-    gap = 2.0 * R + 1e-4  # tiny clearance so they aren't already overlapping
+    # Racked balls touch. The clearance that used to be here was the same 1e-4
+    # as the collision solver's contact band, which put every contact in the
+    # rack exactly on the threshold that decides whether it exists.
+    gap = 2.0 * R
     positions: list[np.ndarray] = []
     for row in range(5):
         for col in range(row + 1):

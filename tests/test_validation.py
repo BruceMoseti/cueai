@@ -14,8 +14,14 @@ import pytest
 
 from cueai.physics import analytic
 from cueai.physics.ball import Ball, MotionState, integrate_ball
-from cueai.physics.collisions import resolve_ball_ball, resolve_cushion
+from cueai.physics.collisions import (
+    CONTACT_BAND,
+    resolve_all_ball_collisions,
+    resolve_ball_ball,
+    resolve_cushion,
+)
 from cueai.physics.constants import BallParams, G, ShotParams, TableParams
+from cueai.physics.rack import make_full_rack
 from cueai.physics.simulator import Simulator
 
 DT = 1e-4
@@ -382,3 +388,93 @@ def test_every_shot_reaches_rest_before_the_time_limit(label: str, shot: ShotPar
         f"{label}: still moving at {settled_at:.1f}s, the {sim.max_time:.0f}s limit truncated it"
     )
 
+
+def test_every_contact_in_a_rack_is_inside_the_contact_band() -> None:
+    """
+    A racked ball touches its neighbours, and the solver has to agree.
+
+    This is the regression test for a bug that was invisible in every other
+    check. The contact band used to be ``1e-4`` and the rack was built with a
+    ``1e-4`` clearance, so all thirty contacts in the triangle sat exactly on
+    the threshold that decides whether a contact exists. Which side of it each
+    one landed on came down to whether ``hypot`` rounded up or down: sixteen
+    registered, fourteen did not. A break then propagated through a contact
+    graph with holes in it, and balls in the middle of the rack came out of a
+    full-power break having never moved.
+
+    Neither the closed-form checks nor the parity harness could see it: the
+    single-ball mechanics were untouched, and the JavaScript port reproduced
+    the broken graph exactly, because it was a faithful port of it.
+    """
+    balls = make_full_rack(TableParams())[1:]
+    touching = 0
+    for i, a in enumerate(balls):
+        for b in balls[i + 1 :]:
+            gap = float(np.hypot(*(b.pos - a.pos))) - a.R - b.R
+            if gap > 1e-3:
+                continue  # not neighbours in the triangle
+            touching += 1
+            assert gap <= CONTACT_BAND, (
+                f"balls {a.number} and {b.number} are {gap * 1e6:.3f} µm apart, "
+                f"outside the {CONTACT_BAND * 1e6:.0f} µm contact band, so the "
+                "solver will not see them as touching"
+            )
+    assert touching == 30, f"a five-row triangle has 30 contacts, found {touching}"
+
+
+def test_the_contact_band_is_far_from_both_things_that_could_swallow_it() -> None:
+    """
+    The band has to be wide against float noise and narrow against physics.
+
+    Stated as a test because the failure mode is silent either way: too tight
+    and real contacts are missed, too loose and balls collide with thin air.
+    """
+    noise = 1e-15  # the scale of rounding in a position, in metres
+    assert CONTACT_BAND > 1000 * noise
+    assert CONTACT_BAND < BallParams().radius / 1000
+
+
+def test_resolving_a_resting_rack_changes_nothing_and_stops_immediately() -> None:
+    """
+    Thirty resting contacts must not cost thirty passes of work every step.
+
+    The sweep exits when a pass changes nothing, so a table that is merely
+    sitting there costs one pass. Without that, making the rack's contacts
+    visible would have quietly multiplied the cost of every timestep.
+    """
+    table = TableParams()
+    before = make_full_rack(table)
+    after = resolve_all_ball_collisions(before, table)
+    for a, b in zip(before, after):
+        assert np.allclose(a.pos, b.pos), f"ball {a.number} was moved while at rest"
+        assert np.allclose(a.vel, b.vel), f"ball {a.number} was pushed while at rest"
+
+
+def test_a_break_puts_every_ball_in_the_rack_in_motion() -> None:
+    """
+    The impulse has to reach the whole triangle, not the near half of it.
+
+    Two deliberately loose claims, because a break is chaotic and a tight
+    assertion about it is a lottery: every ball is set moving, and most of the
+    rack ends up somewhere else. What the numbers are is not the point; that
+    there is no ball the impulse never reached is.
+
+    The distribution across those balls is much less even than a real break —
+    see the multi-contact note in ``docs/VALIDATION.md``. Resolving contacts
+    pairwise in sequence is an approximation to a rack in which fifteen balls
+    are touching at once, and it is the largest known departure from reality in
+    this simulator.
+    """
+    sim = Simulator(dt=1e-3, max_time=20.0)
+    result = sim.simulate_shot(ShotParams(speed=8.0, angle=0.0), full_rack=True, seed=7)
+
+    untouched, displaced = [], 0
+    for ball_id, path in result.trajectories.items():
+        if ball_id == 0:
+            continue
+        if float(np.max(np.linalg.norm(result.velocities[ball_id], axis=1))) < 1e-3:
+            untouched.append(ball_id)
+        displaced += float(np.linalg.norm(path[-1] - path[0])) > 0.05
+
+    assert not untouched, f"balls {sorted(untouched)} never moved on a full-power break"
+    assert displaced >= 8, f"only {displaced} of 15 balls left the rack area"
