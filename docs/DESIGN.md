@@ -173,6 +173,57 @@ outcomes and for screening large candidate sets, an exact tool for contact
 geometry, weaker than a plain regressor once a collision is involved, and not a
 substitute for the simulator when a specific multi-rail outcome matters.
 
+## The fourth tier: the same physics, in a browser
+
+Nothing above can be watched, and a simulator that cannot be watched is taken on
+trust. `web/` is a playable eight-ball table running the same model, which turns
+every claim in this document into something a reader can check by shooting.
+
+**Why a hand port rather than Pyodide or WebAssembly.** Shipping the Python
+would have kept one implementation, which is the obvious argument for it. It
+also ships a multi-megabyte runtime for a physics loop of a few hundred lines,
+and it makes the page's responsiveness a property of someone else's interpreter.
+The loop is small, it is the part of the system whose behaviour is best pinned
+down, and it needs to run tens of thousands of steps inside a turn. So it was
+ported by hand, and the cost of that decision — two implementations that can
+drift — is paid for directly rather than hoped away.
+
+**How the port is held to the reference.** `scripts/export_parity_cases.py`
+records 35 shots from the Python simulator: draw, follow, english off two rails,
+thin cuts, clusters, and full sixteen-ball breaks, chosen so that everything the
+model does appears in at least one of them. `web/test/parity.mjs` replays each
+one in Node and compares every ball's resting position. The two agree to
+1.2 × 10⁻³ mm across 156 s of simulated table time, which is not a tolerance so
+much as a demonstration that the same arithmetic is being done in the same
+order. It runs in CI, and the page does not deploy if it fails.
+
+**The opponent is a search, which is the point.** Aiming needs no model: the
+ghost-ball construction is exact, and a test asserts it pots while half a degree
+either side misses. What is actually hard is *choosing* which exact shot to
+play, and that is a question about futures rather than geometry. So `web/js/bot.js`
+enumerates every ball-and-pocket pair in closed form, discards what is blocked
+or cut thinner than 78°, orders the survivors by a cheap pottability prior, and
+then spends its entire budget simulating them — scoring each rollout by what it
+leaves behind, not only by whether it drops. The strength setting is a rollout
+budget, and the panel reports it in rollouts and table time rather than as an
+adjective, because that is the honest unit.
+
+**The search does not use the surrogate, and that is a result.** A surrogate
+earns its error when you must screen far more candidates than you can afford to
+simulate. Inside one turn there are a few dozen candidates and the ported
+simulator runs 65× faster than the Python reference, so the exact answer is
+affordable and the approximate one would only add error. The place the surrogate
+would earn its keep is the case this game does not present: sweeping a
+continuous space of speed, angle and spin per candidate, where the count is
+bounded by the budget rather than by the geometry.
+
+**Two invariants that only a long run can check.** Twenty headless
+bot-against-bot games (`web/test/selfplay.mjs`) walk every branch of the rules,
+and on each of roughly 800,000 physics steps assert that no two balls share
+space and nothing is inside a cushion. The worst overlap seen is 0.47 mm on a
+57 mm ball. This is the check that distinguishes a solver that converges from
+one that merely looks like it does, and no single shot would ever reveal it.
+
 ## Choices a reviewer might question
 
 **Explicit Euler at 1 ms rather than something higher order.** The dynamics are
