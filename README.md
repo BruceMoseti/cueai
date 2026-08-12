@@ -28,7 +28,10 @@ closed-form references.
 
 No install, no build step, no framework — `web/` is plain ES modules, and the
 whole thing is served as static files. Aim with the mouse, drag back from the
-cue ball to strike, click the cue-ball diagram to move the tip off centre.
+cue ball to strike, click the cue-ball diagram to move the tip off centre. Every
+shot is judged by a full eight-ball rules engine, and the log under the table
+keeps its reasoning on screen: which ball was struck first, how many rails were
+found afterwards, and which of those facts made a shot a foul.
 
 The browser is not running a lookalike physics engine. `web/js/physics.js` is a
 hand port of `src/cueai/physics/`, and the port is measured rather than
