@@ -82,8 +82,11 @@ flattens onto the blue line is the cloth model's central claim, happening in
 front of you, at whatever speed you set the playback to. It is a prediction from
 the mechanics, not a fitted parameter.
 
-When the ball hits something before it finishes sliding, the panel says so and
-withdraws the prediction rather than showing the simulation missing a target it
+The prediction is drawn only across the stretch of the shot it is a prediction
+about. Hit a rail after the handover, as in the trace above, and the line stops
+there, because the speed on the far side of a collision is that collision's
+business. Hit something *before* the handover and the panel withdraws the line
+entirely and says why, rather than showing the simulation missing a target it
 was never aiming at. The time axis expands the first fraction of a second when
 the tail is long, because the handover is over in about 150 ms and everything
 else is a ball rolling.
@@ -244,11 +247,15 @@ magnitude away from both the floating-point noise below it and the rack spacing
 above it, and resolving an untouched rack changes nothing and converges on the
 first pass.
 
+The property that caught it is now a fourth test, because it is exactly the kind
+nobody writes down: mean distance from the centre of the pack has to rise
+strictly from 3 to 6 to 9 m/s. At 8.2 m/s, mean pair separation after a break
+went from 0.478 m before the fix to 0.637 m after, and it now increases with
+every increase in cue speed instead of falling.
+
 The general point is that a validation suite is only as broad as the situations
-it constructs. Ten exact single-ball tests passing is not evidence about
-sixteen balls in contact, and the property that eventually caught this — *harder
-breaks spread further* — is one nobody thinks to assert because it is too
-obvious to be worth stating.
+it constructs. Ten exact single-ball tests passing is not evidence about sixteen
+balls in contact.
 
 ![16-ball break](docs/assets/break_shot.png)
 
@@ -333,8 +340,8 @@ trusted reference, find the closed-form structure inside it, learn only the
 residual, and quantify the accuracy you traded for the speed — is the same one
 used for pricing engines that are too slow for intraday risk, finite-element
 models too slow for design loops, and any Monte Carlo where the inner loop is the
-bottleneck. The four orders of magnitude here come mostly from the closed form,
-not from the network, which is usually how it goes.
+bottleneck. Almost four orders of magnitude here, and they come mostly from the
+closed form rather than from the network, which is usually how it goes.
 
 **Validating against theory rather than against yourself.** A snapshot test
 would have locked in a sign error that made the central physics wrong. Closed-form

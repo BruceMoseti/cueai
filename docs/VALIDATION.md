@@ -176,6 +176,17 @@ worth much:
 - **Ball-ball throw** uses a velocity-dependent friction coefficient of the
   usual form `μ_b ≈ a + b·exp(-c|v_rel|)`, with coefficients that are plausible
   rather than fitted to measurements.
+- **Ball-ball restitution is treated as speed-dependent**, falling from 0.95 by
+  0.02 for every m/s of approach speed above 2. The cushion's speed dependence
+  is measured in the literature; this one is not, and it is the reason a break
+  keeps 48% of its energy at 10 m/s rather than 75%. Removing it was tried:
+  energy retention becomes flat in speed, as it should be if restitution is,
+  and mean pair separation after a 10 m/s break rises from 0.73 m to 0.79 m —
+  but the *median* ball moves less, not more, because a chain of near-elastic
+  collisions transmits more completely to the ball at the end of it and leaves
+  the middle of the rack even quieter. It is left in place because changing it
+  would be tuning an uncalibrated parameter to no measured benefit, but it is a
+  choice rather than a result.
 - **Simultaneous multi-ball contact**, as described above: a rack is resolved as
   a sequence of pairwise collisions, which over-counts the dissipation and
   under-spreads a break.
