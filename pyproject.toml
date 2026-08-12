@@ -67,7 +67,9 @@ ignore = [
 "tests/*" = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+# No python_version pin: mypy targets whichever interpreter runs it, so each entry
+# in the CI matrix checks its own version against the numpy stubs built for it.
+# Ruff's py310 target is what holds the floor for our own syntax.
 files = ["src/cueai"]
 ignore_missing_imports = true
 warn_unused_ignores = true
