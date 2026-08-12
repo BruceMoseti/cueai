@@ -256,7 +256,9 @@ export class Inspector {
       ctx.strokeStyle = colour;
       ctx.lineWidth = 1 * dpr;
       ctx.beginPath();
-      ctx.moveTo(x, top);
+      // Stops short of the top so it does not rule through the speed scale,
+      // which the handover marker otherwise does on almost every shot.
+      ctx.moveTo(x, top + 10 * dpr);
       ctx.lineTo(x, bottom);
       ctx.stroke();
       ctx.fillStyle = colour;
@@ -267,18 +269,21 @@ export class Inspector {
       ctx.fillText(label, x + (right ? -4 * dpr : 4 * dpr), labelTop);
     };
 
+    // The first text line belongs to the speed scale, so the event labels
+    // start below it: the handover happens early in the shot and its label
+    // would otherwise be written straight through the axis maximum.
     if (this.transitionAt) {
       marker(
         this.transitionAt.t,
         `rolls at ${this.transitionAt.v.toFixed(2)} m/s`,
         "rgba(230,237,243,0.8)",
-        top + 1
+        top + 12 * dpr
       );
     }
     // Naming the collision explains the cliff in the green curve, which
     // otherwise reads as the model losing energy for no reason.
     if (this.contactAt !== null) {
-      marker(this.contactAt, this.contactKind, "rgba(240,136,62,0.9)", top + 13 * dpr);
+      marker(this.contactAt, this.contactKind, "rgba(240,136,62,0.9)", top + 24 * dpr);
     }
 
     this.drawTimeAxis(ctx, { axis, px, x0, xSplit, w, pad, bottom, top, dpr, vMax });

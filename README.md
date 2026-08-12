@@ -47,26 +47,51 @@ Node and compares where each ball stopped.
 Continuous integration runs that check on every push and refuses to deploy the
 page if the two drift apart.
 
-**The opponent is a search, and that is the argument.** Aiming needs no learned
-model: the ghost-ball construction is exact, and a test asserts that aiming at
-it pots the ball while half a degree either side misses. So the bot spends
-nothing on aiming. It enumerates every ball-and-pocket pair in closed form,
-discards what is blocked or cut too thin, and spends its entire budget
-*simulating* the survivors to see what each one leaves behind. The panel reports
-how many candidates it enumerated, how many it simulated, and how much table
-time that cost. That is what cheap physics buys: the number of futures you can
-afford to look at.
+**The opponent is a search, and that is the argument.**
 
-**The panels are there to be read.** A live inspector traces the cue ball's
-centre-of-mass speed against its contact-point slip while the shot is in flight,
-and draws the predicted `5/7·v₀` rolling speed as a line the measured curve has
-to land on. When the ball hits something before it finishes sliding, the panel
-says so and drops the prediction rather than showing a miss. Below the table,
-[a written explainer](https://brucemoseti.github.io/cueai/#how) covers the cloth
+<img alt="The bot reporting what its search cost" src="docs/assets/web_bot.png" width="360" align="right" />
+
+Aiming needs no learned model: the ghost-ball construction is exact, and a test
+asserts that aiming at it pots the ball while half a degree either side misses.
+So the bot spends nothing on aiming. It enumerates every ball-and-pocket pair in
+closed form, discards what is blocked or cut too thin, and spends its entire
+budget *simulating* the survivors to see what each one leaves behind.
+
+It then reports what that cost, every turn, in its own units — six pot lines
+solved, twenty-four futures simulated, two minutes of table time inside two
+seconds of yours. That is what cheap physics buys, and it is the reason the
+strength setting is a number of rollouts rather than an adjective.
+
+<br clear="right" />
+
+**The panels are there to be read.**
+
+<img alt="The live cue-ball inspector" src="docs/assets/web_inspector.png" width="430" align="right" />
+
+A live inspector traces the cue ball's centre-of-mass speed
+against its contact-point slip while the shot is in flight, and draws the
+predicted `5/7·v₀` rolling speed as a line the measured curve has to land on.
+The yellow slip curve collapsing to zero exactly where the green speed curve
+flattens onto the blue line is the cloth model's central claim, happening in
+front of you, at whatever speed you set the playback to. It is a prediction from
+the mechanics, not a fitted parameter.
+
+When the ball hits something before it finishes sliding, the panel says so and
+withdraws the prediction rather than showing the simulation missing a target it
+was never aiming at. The time axis expands the first fraction of a second when
+the tail is long, because the handover is over in about 150 ms and everything
+else is a ball rolling.
+
+<br clear="right" />
+
+**And there is prose under the table.**
+[The explainer](https://brucemoseti.github.io/cueai/#how) covers the cloth
 model, the parity harness, the bot's search, where the learned surrogate helps
-and where it does not — including
-[the multi-ball contact bug](#the-bug-the-tests-could-not-see) that the
-single-ball validation suite could never have caught.
+and where it does not, and
+[the multi-ball contact bug](#the-bug-the-tests-could-not-see) the single-ball
+validation suite could never have caught. Every figure it quotes is written into
+it by `scripts/site_facts.py` from the artefacts of an actual run, and CI fails
+if the page and the measurements disagree.
 
 ```bash
 make play      # serve it at http://localhost:8123
@@ -398,6 +423,13 @@ scripts/
 - Not calibrated against a real table. No measurements were taken, so the claim
   is internal consistency with classical mechanics, not fidelity to specific
   equipment. Cloth and cushion coefficients come from the published ranges.
+- A break under-spreads, and the size of the gap is measured rather than
+  guessed at. A rack is resolved as a chain of pairwise collisions, so
+  restitution is applied about fifteen times where the real event dissipates
+  once, and only 48% of the kinetic energy survives a 10 m/s break. Balls at the
+  back of the rack therefore leave slower than they should. This is the largest
+  known departure from reality in the simulator; the arithmetic and the fix it
+  would need are in [docs/VALIDATION.md](docs/VALIDATION.md).
 - Cue ball squirt and swerve are not modelled, so aiming advice would be
   systematically off for heavy sidespin.
 - Multi-rail outcomes are not usefully predictable by any of the three methods

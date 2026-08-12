@@ -478,3 +478,39 @@ def test_a_break_puts_every_ball_in_the_rack_in_motion() -> None:
 
     assert not untouched, f"balls {sorted(untouched)} never moved on a full-power break"
     assert displaced >= 8, f"only {displaced} of 15 balls left the rack area"
+
+
+def test_a_harder_break_opens_the_table_further() -> None:
+    """
+    The property whose sign was wrong, asserted so it cannot go wrong quietly.
+
+    Nobody writes this test first, because it is too obvious to be worth
+    stating. That is exactly why the contact-band defect survived: every
+    closed-form check passed, the browser port agreed to eleven decimal places,
+    and the only visible symptom was that a rack struck at 8 m/s ended up
+    *tighter* than one struck at 5. The measurement that found it is the one
+    below.
+
+    Coarse on purpose. A 3 ms step and one rack per speed keeps this to a few
+    seconds, and the claim is about the direction of an aggregate, which is not
+    a quantity a millimetre of discretisation decides.
+    """
+    spreads = []
+    for speed in (3.0, 6.0, 9.0):
+        sim = Simulator(dt=3e-3, max_time=15.0)
+        result = sim.simulate_shot(ShotParams(speed=speed, angle=0.0), full_rack=True, seed=7)
+        resting = np.array(
+            [
+                result.endpoints[ball_id][:2]
+                for ball_id in result.trajectories
+                if ball_id != 0 and not result.pocketed[ball_id]
+            ]
+        )
+        centre = resting.mean(axis=0)
+        spreads.append(float(np.mean(np.linalg.norm(resting - centre, axis=1))))
+
+    assert spreads[0] < spreads[1] < spreads[2], (
+        "a harder break has to leave the balls further apart, but the mean "
+        f"distance from the centre of the pack went {spreads[0]:.3f} → "
+        f"{spreads[1]:.3f} → {spreads[2]:.3f} m at 3, 6 and 9 m/s"
+    )

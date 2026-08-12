@@ -24,6 +24,8 @@ const CHROME_CANDIDATES = [
   "/usr/bin/chromium-browser",
 ].filter(Boolean);
 
+const GIF_SECONDS = 12;
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const get = (flag, fallback) => {
@@ -251,16 +253,19 @@ function writeVideo(shots, out) {
     mp4,
   ]);
 
-  // A GIF as well: the README renders inline everywhere, a video does not.
+  // A GIF as well: the README renders one inline everywhere, a video not
+  // reliably. Trimmed, smaller and slower-sampled than the clip, because a
+  // README that costs four megabytes to open is a README nobody scrolls.
   const palette = path.join(dir, "palette.png");
+  const gifFilter = "fps=12,scale=760:-1:flags=lanczos";
   run("ffmpeg", [
-    "-y", "-loglevel", "error", "-i", mp4,
-    "-vf", "fps=14,scale=880:-1:flags=lanczos,palettegen=stats_mode=diff",
+    "-y", "-loglevel", "error", "-t", String(GIF_SECONDS), "-i", mp4,
+    "-vf", `${gifFilter},palettegen=stats_mode=diff`,
     palette,
   ]);
   run("ffmpeg", [
-    "-y", "-loglevel", "error", "-i", mp4, "-i", palette,
-    "-lavfi", "fps=14,scale=880:-1:flags=lanczos[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=3",
+    "-y", "-loglevel", "error", "-t", String(GIF_SECONDS), "-i", mp4, "-i", palette,
+    "-lavfi", `${gifFilter}[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=3`,
     path.join(out, "web_demo.gif"),
   ]);
 

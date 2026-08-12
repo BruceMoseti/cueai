@@ -307,18 +307,30 @@ function reportBotDecision(decision) {
 
   const lines = [];
   if (stats.rollouts) {
-    lines.push(
-      `<b>${stats.candidates}</b> pots solved in closed form, ` +
-        `<b>${stats.rollouts}</b> simulated (${stats.tableSeconds.toFixed(1)} s of table time ` +
-        `in ${Math.round(stats.elapsedMs)} ms).`
-    );
+    // What the search spent, in its own units. The table time is the number
+    // worth reading: it is how much simulated billiards fitted in the pause.
+    const cost =
+      `${stats.tableSeconds.toFixed(1)} s of table time ` +
+      `in ${Math.round(stats.elapsedMs)} ms`;
+    if (stats.candidates) {
+      const pruned = stats.pruned ? `, ${stats.pruned} pruned` : "";
+      lines.push(
+        `<b>${stats.candidates}</b> pot line${stats.candidates === 1 ? "" : "s"} ` +
+          `solved in closed form${pruned}, <b>${stats.rollouts}</b> simulated (${cost}).`
+      );
+    } else {
+      lines.push(
+        `No pot line exists from here. <b>${stats.rollouts}</b> safety shots ` +
+          `simulated (${cost}).`
+      );
+    }
   }
   if (plan.kind === "pot") {
     lines.push(
       `Chose the <b>${plan.target}</b>, cut <b>${((plan.cut * 180) / Math.PI).toFixed(0)}°</b>.`
     );
   } else if (plan.kind === "safety") {
-    lines.push(`Nothing pottable. Playing safe off the <b>${plan.target}</b>.`);
+    lines.push(`Playing safe off the <b>${plan.target}</b>.`);
   } else {
     lines.push("No legal target could be reached from here.");
   }

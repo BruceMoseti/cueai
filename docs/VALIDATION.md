@@ -49,6 +49,7 @@ because friction both slows the ball and spins it up:
 | Timestep convergence, thin cut | 2 ms vs 1 ms | 60 mm | 46 mm |
 | Contacts a racked triangle presents | 30 | exact | 30 |
 | Balls set moving by a full-power break | all 15 | — | holds |
+| Break spread against cue speed | strictly increasing | — | holds |
 
 ## The bug none of the above could see
 
@@ -64,26 +65,62 @@ Fourteen did not.
 
 The consequences were visible only in aggregate. A break propagated through a
 contact graph with holes in it, so balls in the middle of the rack came out of
-a full-power break having barely moved, and mean pairwise separation after a
-break *fell* as cue speed rose — the table opened up less the harder it was
-struck:
+a full-power break having barely moved, and the table opened up *less* the
+harder it was struck. Both configurations, 20 racks at each speed:
 
 | Cue speed | 3 m/s | 5 m/s | 6.5 m/s | 8.2 m/s | 10 m/s |
 |---|---:|---:|---:|---:|---:|
-| Before, mean pair separation | 0.32 m | 0.57 m | 0.53 m | 0.46 m | 0.51 m |
-| After | 0.31 m | 0.62 m | 0.59 m | 0.54 m | 0.56 m |
+| Mean pair separation, before | 0.348 m | 0.610 m | 0.575 m | **0.478 m** | 0.577 m |
+| Mean pair separation, after | 0.320 m | 0.568 m | 0.577 m | 0.637 m | 0.731 m |
+| Mean distance travelled, before | 0.162 m | 0.321 m | 0.309 m | 0.310 m | 0.387 m |
+| Mean distance travelled, after | 0.135 m | 0.303 m | 0.370 m | 0.474 m | 0.549 m |
 
-Averaged over 40 racks each. It was found by measuring that relationship and
-getting the sign wrong, not by a test going red — and not by the browser parity
-harness either, which reproduced the broken contact graph to eleven decimal
-places because it was a faithful port of it. Two implementations agreeing is
-evidence about the port, and about nothing else.
+Before the fix, hitting the rack half again as hard as 5 m/s left it *tighter*,
+and past 5 m/s the balls stopped travelling any further at all. After it, both
+rise with every increase in cue speed.
+
+It was found by measuring that relationship and getting the sign wrong, not by
+a test going red — and not by the browser parity harness either, which
+reproduced the broken contact graph to eleven decimal places because it was a
+faithful port of it. Two implementations agreeing is evidence about the port,
+and about nothing else.
 
 The tolerance now has a name, `CONTACT_BAND`, the broad and narrow phases use
 the same one, and the balls are racked touching so that nothing sits on the
 boundary. Tests assert all three, including that the band stays far from both
 the floating-point noise that would swallow it and the physical scale that
-would make it meaningless.
+would make it meaningless — and, now, that a harder break opens the table
+further, which is the property nobody thought to assert because it is too
+obvious to state.
+
+## The largest known departure from reality
+
+Separately from that bug, and not fixed by it: resolving a rack's contacts
+pairwise, in sequence, dissipates far more energy than a real break does.
+
+| Cue speed | 3 m/s | 5 m/s | 6.5 m/s | 8.2 m/s | 10 m/s |
+|---|---:|---:|---:|---:|---:|
+| Kinetic energy surviving the impact | 74% | 65% | 59% | 53% | 48% |
+
+Measured either side of the largest single-step energy drop in the shot, which
+is the moment the rack is struck; before and after the contact-band fix these
+numbers agree to within a point, so this is not a consequence of it.
+
+The mechanism is arithmetic rather than mysterious. An equal-mass head-on
+collision with restitution `e` keeps `(1 + e²)/2` of the kinetic energy, about
+95% at `e = 0.95`. A rack is fifteen balls already touching, so the impulse is
+resolved as a chain of roughly fifteen such collisions and the survival factor
+compounds to `0.95¹⁵ ≈ 0.46`. The real event is a single stress wave through
+bodies in continuous contact, which dissipates once rather than fifteen times.
+
+What it costs: the speed the impulse hands to each ball falls off geometrically
+down the chain, so the balls at the back of the rack leave with a few
+centimetres per second and finish near where they started. A break here opens
+the table, but it opens it less than a real one, and the difference grows with
+cue speed. Fixing it properly means treating a simultaneous contact set as one
+event — applying material restitution at the leading edge of the propagation
+rather than at every pair along it — which is a change to the solver rather
+than to a coefficient, and is not attempted here.
 
 ## Is the reference converged?
 
@@ -139,6 +176,9 @@ worth much:
 - **Ball-ball throw** uses a velocity-dependent friction coefficient of the
   usual form `μ_b ≈ a + b·exp(-c|v_rel|)`, with coefficients that are plausible
   rather than fitted to measurements.
+- **Simultaneous multi-ball contact**, as described above: a rack is resolved as
+  a sequence of pairwise collisions, which over-counts the dissipation and
+  under-spreads a break.
 
 None of these are calibrated against a real table, because no measurements were
 taken. The claim this project makes is internal consistency with classical

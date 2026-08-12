@@ -181,7 +181,7 @@
             </p>
             <div class="measure">
               <div>
-                <div class="n" data-fact="physics-tests">31</div>
+                <div class="n" data-fact="physics-tests">32</div>
                 <div class="l">physics tests</div>
               </div>
               <div><div class="n">3 mm</div><div class="l">timestep convergence</div></div>
@@ -207,7 +207,18 @@
               measuring break spread against cue speed and getting the sign wrong, not by a
               test failing. What fixed it was giving the tolerance a name, using the same one
               everywhere, and racking the balls actually touching so nothing sits on the
-              boundary.
+              boundary. A test now asserts the property that caught it, because it is
+              exactly the kind nobody writes down: a harder break opens the table further.
+            </p>
+            <p>
+              Measuring that turned up something the fix does not solve, and which is worth
+              stating rather than hiding. A rack is resolved as a chain of about fifteen
+              pairwise collisions, and each one applies restitution, so the survival factor
+              compounds: only <b>48%</b> of the kinetic energy comes through a 10 m/s break,
+              where the real event is one stress wave that dissipates once. The break you
+              see below opens the table, but less than a real one would. It is the largest
+              known departure from reality here, and fixing it means treating a simultaneous
+              contact set as a single event rather than adjusting a coefficient.
             </p>
           </div>
 
