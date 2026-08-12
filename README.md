@@ -60,7 +60,10 @@ Twenty headless bot-against-bot games walk every branch of the rules, and check
 on each of the roughly eight hundred thousand physics steps they take that no
 two balls are ever sharing space and nothing is ever inside a cushion. The worst
 overlap seen is 0.5 mm on a 57 mm ball — a fifth of a screen pixel — which is
-the difference between "the solver converges" and "it looks like it does".
+the difference between "the solver converges" and "it looks like it does". They
+also assert that each break moves at least ten of the fifteen; it moves twelve,
+and the check exists because a break that clips the apex leaves the triangle
+standing while looking, convincingly, like a limitation of the physics.
 
 **The opponent is a search, and that is the argument.**
 

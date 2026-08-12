@@ -24,6 +24,10 @@ const MAX_SHOTS = 250;
 // 2.5 mm, so this is the threshold at which two balls would start to look like
 // they were sharing space. Twenty games measure a worst case around 0.5 mm.
 const MAX_OVERLAP = 0.002;
+// How many of the fifteen a full break has to actually move. Well under what a
+// square hit achieves, and well above what clipping the apex leaves behind, so
+// it fails on a broken break rather than on an unlucky one.
+const MIN_BROKEN = 10;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -99,6 +103,31 @@ function checkInvariants(state, shotNumber) {
   }
 }
 
+/**
+ * Check that the break actually opened the rack.
+ *
+ * A break that clips the apex instead of striking it leaves the triangle
+ * standing, and nothing else here would notice: the shot is legal, the game
+ * continues, the invariants hold. It looks exactly like a physics limitation,
+ * which is what makes it worth asserting rather than eyeballing. Striking the
+ * apex square moves twelve of the fifteen; clipping it moves five.
+ */
+function breakOpened(state, before, seed, worst) {
+  const balls = state.balls.filter((b) => b.number !== 0);
+  const moved = balls.filter(
+    (b, i) => b.pocketed || Math.hypot(b.x - before[i][0], b.y - before[i][1]) > 0.05
+  ).length;
+  if (moved < worst.leastMoved) worst.leastMoved = moved;
+  worst.breaks++;
+  worst.movedTotal += moved;
+  if (moved < MIN_BROKEN) {
+    throw new Error(
+      `the break in game ${seed} moved only ${moved} of ${balls.length} balls ` +
+        `more than 5 cm; the rack did not open`
+    );
+  }
+}
+
 async function playGame(seed, difficulties, verbose, worst) {
   const state = createGame(seed);
   const rng = mulberry32(seed ^ 0x9e3779b9);
@@ -120,6 +149,9 @@ async function playGame(seed, difficulties, verbose, worst) {
     const shooter = state.turn;
     const decision = await chooseShot(state, { difficulty: difficulties[shooter], rng });
     const cue = state.balls.find((b) => b.number === 0);
+    const rackBefore = context.wasBreak
+      ? state.balls.filter((b) => b.number !== 0).map((b) => [b.x, b.y])
+      : null;
     applyShot(cue, decision.shot);
     const events = simulateToRest(state.balls, state.table, {
       dt: GAME_DT,
@@ -132,6 +164,7 @@ async function playGame(seed, difficulties, verbose, worst) {
     if (outcome.foul) fouls++;
     potted += outcome.objectPotted.length;
     checkInvariants(state, shots);
+    if (rackBefore) breakOpened(state, rackBefore, seed, worst);
 
     if (verbose) {
       const who = context.wasBreak ? "break" : shooter;
@@ -161,7 +194,7 @@ async function main() {
 
   const started = Date.now();
   const results = [];
-  const worst = { overlap: 0 };
+  const worst = { overlap: 0, leastMoved: Infinity, breaks: 0, movedTotal: 0 };
   for (let i = 0; i < games; i++) {
     if (verbose) console.log(`game ${i}`);
     results.push(await playGame(1000 + i, difficulties, verbose, worst));
@@ -181,6 +214,10 @@ async function main() {
   console.log(
     `  worst ball overlap while moving ${(worst.overlap * 1000).toFixed(3)} mm ` +
       `on a ${(2 * BALL.radius * 1000).toFixed(1)} mm ball`
+  );
+  console.log(
+    `  the break moved ${(worst.movedTotal / worst.breaks).toFixed(1)}/15 balls on average, ` +
+      `${worst.leastMoved} at worst`
   );
   console.log("  every game reached a legal conclusion");
 }
