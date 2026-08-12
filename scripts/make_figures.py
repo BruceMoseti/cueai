@@ -220,6 +220,41 @@ def figure_accuracy(metrics: dict) -> Path:
     return _save(fig, "accuracy.png")
 
 
+def figure_reliability(metrics: dict) -> Path:
+    """Error against coverage, when the closed-form cushion count is used as a gate."""
+    rows = metrics["risk_coverage"]
+    coverage = [row["coverage_pct"] for row in rows]
+    series = [
+        ("closed form", "analytic", "#9aa4ad", "o"),
+        ("gradient boosting", "gbm", BLUE, "s"),
+        ("closed form + CueNet", "cuenet", ACCENT, "D"),
+    ]
+
+    fig, ax = plt.subplots(figsize=(7.2, 3.4))
+    for label, key, colour, marker in series:
+        ax.plot(coverage, [row[key] for row in rows], marker + "-", color=colour,
+                lw=1.6, ms=5, label=label)
+    for row in rows:
+        gate = row["expected_cushions_at_most"]
+        ax.annotate(
+            "no gate" if gate == "all" else f"≤{gate}",
+            xy=(row["coverage_pct"], row["cuenet"]),
+            xytext=(0, -13),
+            textcoords="offset points",
+            ha="center",
+            fontsize=7.5,
+            color=ACCENT,
+        )
+    ax.set_xlabel("shots answered by the fast path  (%)")
+    ax.set_ylabel("mean endpoint error  (mm)")
+    ax.set_title(
+        "Choosing how much to answer: the closed-form cushion count is a free gate",
+        fontsize=10,
+    )
+    ax.legend(frameon=False, loc="upper left")
+    return _save(fig, "reliability.png")
+
+
 def figure_latency(latency: dict) -> Path:
     """Cost per shot, log scale, because the range spans five orders of magnitude."""
     labels = {
@@ -279,6 +314,11 @@ def main() -> None:
         figure_accuracy(metrics)
     else:
         print("skipping accuracy figure: run training to produce models/metrics.json")
+
+    if metrics.get("risk_coverage"):
+        figure_reliability(metrics)
+    else:
+        print("skipping reliability figure: run training to produce models/metrics.json")
 
     latency_path = ROOT / "models" / "latency.json"
     if latency_path.exists():

@@ -4,7 +4,7 @@
 
 Simulating a billiards shot accurately is slow. Sixteen bodies, each in one of
 four motion states, with collisions resolved every millisecond, costs about
-**36 seconds per rack shot** in this implementation. Anything that needs many
+**35 seconds per rack shot** in this implementation. Anything that needs many
 shot outcomes — searching for a good shot, estimating the odds of a break,
 training a policy — cannot afford that.
 
@@ -24,11 +24,11 @@ shot parameters (speed, angle, tip offset, cue position, cloth μ, cushion e)
         |                             |
         +--------------+--------------+
                        v
-              predicted resting positions        0.58 ms total
+              predicted resting positions        0.57 ms total
                        :
                        : compared against
                        v
-              numerical simulator                36 s, ground truth
+              numerical simulator                35 s, ground truth
 ```
 
 ## Three tiers, on purpose
@@ -88,9 +88,63 @@ harder toward the middle of the table. The reported spread ratio makes that
 visible: CueNet reproduces 97% of the true spread in the predictable buckets and
 87% in the chaotic one.
 
-The honest summary is that this is a good surrogate for the shots a player
-actually aims — direct pots, position play, one rail — and a poor predictor of
-multi-rail scatter, which is a property of the physics rather than of the model.
+## Reporting confidence without a second model
+
+Slicing by the simulator's cushion count is an autopsy: you only have that number
+once you have paid for the simulation. The closed-form solver, though, reports the
+cushion count it *expects* while computing its answer, so that signal is free —
+and it is a good enough proxy for "is this outcome chaotic" to gate on:
+
+| Answer only when the solver expects | Coverage | CueNet error |
+|---|---:|---:|
+| No cushion | 9.8% | 100 mm |
+| At most one | 27.5% | 189 mm |
+| At most two | 50.0% | 253 mm |
+| Anything | 100% | 378 mm |
+
+![Error against coverage](assets/reliability.png)
+
+This is what makes the fast path deployable rather than merely fast: a caller can
+choose an error budget, take the coverage that comes with it, and route the
+remainder to the simulator. The alternative — a single headline error over a
+distribution that mixes 100 mm shots with 700 mm shots — gives a caller no way to
+act. The residual model happens to be the most accurate of the three at every
+coverage level, which is a more robust claim than its 1.9% edge on the mean.
+
+## What the surrogate is and is not good enough for
+
+Worth being precise, because "0.57 ms billiards predictor" invites the wrong
+conclusion.
+
+**Not accurate enough to aim with.** On a representative layout — cue ball at
+(0.60, 0.35), object ball at (1.70, 0.75), far corner pocket — the aim window
+that actually pots the ball is **0.15° to 0.25° wide**, at stroke speeds of 1.5,
+2.5 and 4 m/s. Ranking thousands of candidate aim lines by the surrogate's
+predicted object endpoint does concentrate them near the correct angle, but the
+top-ranked candidates spread over roughly two degrees, so the ranking never
+resolves a window an order of magnitude narrower than that.
+
+This is less of a loss than it looks, because aiming needs no learned model at
+all. The contact geometry is exact and closed-form: the ghost-ball point is the
+object ball's centre displaced one diameter back along the line to the pocket, and
+shooting at it pots the ball at every speed tested. The window is not symmetric
+about it, though — it extends about 0.1° to the thin side and barely at all to the
+thick side, which is collision-induced throw, the object ball being dragged off
+the geometric line by ball-ball friction. That the simulator reproduces an effect
+real players compensate for by feel is a better argument for the cloth model than
+any of the aggregate error numbers.
+
+**The hard quantity is where the cue ball finishes**, which is what position play
+depends on, and it is the surrogate's weakest output: 517 mm mean error against
+239 mm for the object ball, because the closed-form baseline has no notion of
+ball-ball contact and the residual has to supply all of it. Below one expected
+cushion contact it is a usefully accurate estimate; past that it is a screen, not
+an answer.
+
+So the honest summary: a good surrogate for the *distribution* of low-cushion
+outcomes and for screening large candidate sets, an exact tool for contact
+geometry, and not a substitute for the simulator when a specific multi-rail
+outcome matters.
 
 ## Choices a reviewer might question
 

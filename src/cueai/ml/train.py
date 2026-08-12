@@ -101,6 +101,39 @@ def stratify_by_contacts(
     return rows
 
 
+def risk_coverage(
+    predictions: dict[str, np.ndarray], truth: np.ndarray, expected_cushions: np.ndarray
+) -> list[dict]:
+    """
+    Accuracy as a function of how much of the shot space the model answers for.
+
+    :func:`stratify_by_contacts` slices by what the simulator *did*, which is only
+    knowable after paying for the simulation. This slices by what the closed-form
+    solver *expects* before anything is run, so it is usable as a gate: answer
+    only when the solver predicts at most ``k`` cushion contacts, and defer the
+    rest to the simulator. The gate is free, because the expected cushion count
+    is already computed as part of producing the prediction.
+    """
+    rows = []
+    for threshold in (0, 1, 2, 3, None):
+        mask = (
+            np.ones(len(truth), dtype=bool)
+            if threshold is None
+            else expected_cushions <= threshold
+        )
+        if not mask.any():
+            continue
+        row: dict = {
+            "expected_cushions_at_most": "all" if threshold is None else str(threshold),
+            "n": int(mask.sum()),
+            "coverage_pct": round(100.0 * float(mask.mean()), 1),
+        }
+        for name, pred in predictions.items():
+            row[name] = endpoint_errors(pred[mask], truth[mask])["euclidean_mm"]
+        rows.append(row)
+    return rows
+
+
 def train_gbm(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -281,6 +314,9 @@ def main(argv: list[str] | None = None) -> dict:
         "models": {"analytic": analytic, "gbm": gbm, "cuenet": cuenet},
         "by_cushion_contacts": stratify_by_contacts(
             predictions, y_test, df["n_cushion"].to_numpy()[test_idx]
+        ),
+        "risk_coverage": risk_coverage(
+            predictions, y_test, x_test[:, FEATURE_NAMES.index("base_cushions")]
         ),
         "error_reduction_vs_analytic_pct": round(
             100 * (1 - cuenet["euclidean_mm"] / analytic["euclidean_mm"]), 1

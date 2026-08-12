@@ -8,10 +8,10 @@
 a learned model that corrects what the closed form misses — roughly 60,000x
 faster than integration, with the accuracy measured and the failure mode stated.**
 
-Predicting where the balls come to rest costs **about 37 seconds per rack shot**
-by numerical integration. This project reduces that to **0.6 ms** with a mean
-error of **97 mm for direct shots** on a 2.54 x 1.27 m table, and shows exactly
-where the approach stops working rather than averaging it away.
+Predicting where the balls come to rest costs **about 35 seconds per rack shot**
+by numerical integration. This project reduces that to **0.57 ms** with a mean
+error of **97 mm for direct shots** on a 2.54 x 1.27 m table, and — the part that
+makes it usable — tells you in advance which of its own predictions to trust.
 
 Every number in this README is produced by a script in this repository and
 regenerated with `make all`.
@@ -34,15 +34,17 @@ the cue ball and the object ball. Full tables in
 
 | Method | Cost per shot | Mean error | Direct shots (no cushion) | R² |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16 balls | 36.8 s | — (ground truth) | — | — |
+| Numerical simulator, 16 balls | 35.2 s | — (ground truth) | — | — |
 | Closed-form solver, no fitting | 0.26 ms | 494 mm | 114 mm | 0.01 |
-| Gradient boosting on the same features | 2.6 ms | 385 mm | 160 mm | 0.51 |
-| **Closed form + learned residual** | **0.63 ms** | **378 mm** | **97 mm** | 0.42 |
+| Gradient boosting on the same features | 2.5 ms | 385 mm | 160 mm | 0.51 |
+| **Closed form + learned residual** | **0.57 ms** | **378 mm** | **97 mm** | 0.42 |
 
-The learned residual beats both the physics baseline and a conventional
-regressor, is four times cheaper to evaluate than the boosted trees, and is the
-only one of the three that improves on the physics for the shots where physics is
-nearly sufficient.
+The learned residual has the lowest error of the three, is four times cheaper to
+evaluate than the boosted trees, and is the only one that improves on the physics
+for the shots where physics is nearly sufficient. Gradient boosting posts the
+higher R² by hedging toward the middle of the table on shots nobody can predict,
+which flatters the variance-explained metric and costs it 60 mm on the shots that
+matter.
 
 ### Where it stops working, and why that is the interesting part
 
@@ -54,6 +56,32 @@ cue placement moves the outcome by a table length. The error breakdown above is
 published instead of hidden inside a single average, because "this model predicts
 direct and one-rail shots to about 10 cm and multi-rail scatter not at all" is a
 usable statement, while "378 mm mean error" is not.
+
+### Knowing which predictions to trust, before making them
+
+![Error against coverage](docs/assets/reliability.png)
+
+The breakdown above is sliced by what the simulator *did*, which you only know
+after paying the 35 seconds. That makes it an autopsy, not a control.
+
+But the closed-form solver reports how many cushions it *expects* on the way to
+its answer, and that number is already computed as part of the prediction, so it
+is free. It turns out to be a good enough proxy for "is this shot chaotic" to use
+as a gate:
+
+| Answer only when the solver expects | Coverage | Mean error |
+|---|---:|---:|
+| No cushion | 9.8% | **100 mm** |
+| At most one cushion | 27.5% | 189 mm |
+| At most two cushions | 50.0% | 253 mm |
+| Anything (no gate) | 100% | 378 mm |
+
+So the fast path is not a 378 mm model. It is a 100 mm model that knows it should
+decline nine shots in ten, or a 253 mm model over half the shot space, and the
+shots it declines can be sent to the simulator. A surrogate that reports its own
+applicability domain can be deployed; one with a single headline error cannot.
+The learned residual is also the most accurate of the three models at every
+coverage level, which is a stronger claim than its 1.9% edge on the overall mean.
 
 ### Speed
 
@@ -86,7 +114,7 @@ git clone https://github.com/BruceMoseti/cueai && cd cueai
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-make test          # 36 tests, including the closed-form validation suite
+make test          # 39 tests, including the closed-form validation suite
 make all           # regenerate the dataset, model, benchmarks and figures
 ```
 
@@ -163,10 +191,12 @@ references, conservation laws and analytic decay rates caught it in one run. The
 same discipline applies to any numerical pipeline: solve a special case exactly
 and check against it.
 
-**Knowing the limit of your own model.** The chaos analysis, the per-stratum
-error breakdown and the prediction-spread ratio exist so that a user knows which
-predictions to trust. A model that is confident everywhere and accurate in half
-the space is more dangerous than a slower one.
+**Selective prediction with a free confidence signal.** The per-stratum error
+breakdown, the prediction-spread ratio and the coverage curve exist so a caller
+knows which predictions to trust — and the gating signal falls out of the physics
+baseline at no extra cost, rather than requiring a second calibrated model. A
+surrogate that is confident everywhere and accurate in half the space is more
+dangerous than the slow model it replaced.
 
 **Model selection without leaking the test set.** Epochs are chosen on a
 validation split carved from the training data; the test split is scored once,
@@ -199,7 +229,7 @@ src/cueai/
     features.py     one feature path for training and serving
     model.py        CueNet, zero-initialised residual head
     train.py        training, baseline comparison, stratified evaluation
-    infer.py        predict_fast (0.58 ms) and predict (full simulation)
+    infer.py        predict_fast (0.57 ms) and predict (full simulation)
   api/main.py       FastAPI service
   ui/app.py         PyQt6 interactive table
   vision/overlay.py OpenCV trajectory overlays
@@ -208,6 +238,7 @@ tests/
   test_validation.py  closed-form physics validation
   test_features.py    train/serve feature consistency
   test_physics.py     simulator behaviour
+  test_metrics.py     the reported metrics, including the trust gate
   test_api.py         HTTP contract
 
 scripts/
@@ -224,6 +255,10 @@ scripts/
   systematically off for heavy sidespin.
 - Multi-rail outcomes are not usefully predictable by any of the three methods
   here, as measured above.
+- The fast path predicts *where balls stop*; it is not an aiming aid. The window
+  that pots a ball is 0.15° to 0.25° wide on the layout measured in
+  [docs/DESIGN.md](docs/DESIGN.md), roughly ten times finer than the surrogate can
+  resolve. Aiming is exact closed-form geometry anyway, and needs no model.
 - The reference simulator is straightforward Python. It is a definition of truth,
   not a fast engine; the vectorisation work stopped once the hot loop was 6x
   cheaper.

@@ -9,12 +9,12 @@ Regenerate with `python scripts/benchmark.py`. Single CPU core, no GPU.
 
 | Method | Mean | Median | p95 | Speedup vs full rack |
 |---|---:|---:|---:|---:|
-| Numerical simulator, 16-ball rack | 36.8 s | 36.8 s | 36.9 s | — |
-| Numerical simulator, cue + object ball | 350.0 ms | 341.3 ms | 380.3 ms | 105x |
-| Closed-form solver (no ML) | 0.261 ms | 0.259 ms | 0.269 ms | 141,228x |
-| Gradient boosting on the same features | 2.6 ms | 2.6 ms | 2.7 ms | 13,948x |
-| Closed form + CueNet residual (ONNX Runtime) | 0.626 ms | 0.571 ms | 0.595 ms | 58,809x |
-| CueNet forward pass only, batch of 1024 (per shot) | 1.3 us | 0.8 us | 4.7 us | — |
+| Numerical simulator, 16-ball rack | 35.2 s | 35.4 s | 35.5 s | — |
+| Numerical simulator, cue + object ball | 333.9 ms | 333.8 ms | 335.2 ms | 105x |
+| Closed-form solver (no ML) | 0.256 ms | 0.254 ms | 0.264 ms | 137,489x |
+| Gradient boosting on the same features | 2.5 ms | 2.5 ms | 2.6 ms | 13,997x |
+| Closed form + CueNet residual (ONNX Runtime) | 0.568 ms | 0.563 ms | 0.583 ms | 61,985x |
+| CueNet forward pass only, batch of 1024 (per shot) | 0.6 us | 0.6 us | 0.7 us | — |
 
 ## Accuracy on held-out shots
 
@@ -36,3 +36,15 @@ Resting position is a smooth function of the shot until the ball starts ricochet
 | 1 | 650 | 225 | 223 | 193 |
 | 2 | 875 | 370 | 291 | 288 |
 | 3+ | 2061 | 708 | 522 | 531 |
+
+## Knowing which predictions to trust
+
+The table above slices by what the simulator did, which is only knowable after paying for the simulation. This one slices by the cushion count the closed-form solver *expects*, which is already computed as part of making the prediction and therefore costs nothing extra. Answering only the shots below a threshold trades coverage for accuracy:
+
+| Expected cushions | Shots answered | Coverage | Closed form | Gradient boosting | CueNet residual |
+|---|---:|---:|---:|---:|---:|
+| ≤ 0 | 390 | 9.8% | 113 mm | 158 mm | 100 mm |
+| ≤ 1 | 1098 | 27.5% | 240 mm | 220 mm | 189 mm |
+| ≤ 2 | 2002 | 50.0% | 334 mm | 266 mm | 253 mm |
+| ≤ 3 | 2748 | 68.7% | 401 mm | 316 mm | 306 mm |
+| no gate | 4000 | 100.0% | 494 mm | 385 mm | 378 mm |

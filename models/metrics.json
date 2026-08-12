@@ -64,6 +64,48 @@
       "cuenet_spread_ratio": 0.8685411810874939
     }
   ],
+  "risk_coverage": [
+    {
+      "expected_cushions_at_most": "0",
+      "n": 390,
+      "coverage_pct": 9.8,
+      "analytic": 113.11882019042969,
+      "gbm": 158.0086885424552,
+      "cuenet": 100.08148193359375
+    },
+    {
+      "expected_cushions_at_most": "1",
+      "n": 1098,
+      "coverage_pct": 27.5,
+      "analytic": 240.16458129882812,
+      "gbm": 220.4929185751551,
+      "cuenet": 189.36886596679688
+    },
+    {
+      "expected_cushions_at_most": "2",
+      "n": 2002,
+      "coverage_pct": 50.0,
+      "analytic": 333.6151123046875,
+      "gbm": 265.91997078158806,
+      "cuenet": 252.90367126464844
+    },
+    {
+      "expected_cushions_at_most": "3",
+      "n": 2748,
+      "coverage_pct": 68.7,
+      "analytic": 401.1279602050781,
+      "gbm": 315.6802969586645,
+      "cuenet": 305.8078918457031
+    },
+    {
+      "expected_cushions_at_most": "all",
+      "n": 4000,
+      "coverage_pct": 100.0,
+      "analytic": 494.0398254394531,
+      "gbm": 385.31390765756873,
+      "cuenet": 378.03277587890625
+    }
+  ],
   "error_reduction_vs_analytic_pct": 23.5,
   "error_reduction_vs_gbm_pct": 1.9,
   "environment": {

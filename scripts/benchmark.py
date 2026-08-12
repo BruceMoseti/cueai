@@ -182,6 +182,29 @@ def render_markdown(latency: dict, metrics: dict | None) -> str:
                 f"| {row['cushion_contacts']} | {row['n']} | {row['analytic']:.0f} | "
                 f"{row['gbm']:.0f} | {row['cuenet']:.0f} |"
             )
+
+    if metrics and metrics.get("risk_coverage"):
+        lines += [
+            "",
+            "## Knowing which predictions to trust",
+            "",
+            "The table above slices by what the simulator did, which is only knowable "
+            "after paying for the simulation. This one slices by the cushion count the "
+            "closed-form solver *expects*, which is already computed as part of making "
+            "the prediction and therefore costs nothing extra. Answering only the shots "
+            "below a threshold trades coverage for accuracy:",
+            "",
+            "| Expected cushions | Shots answered | Coverage | Closed form | "
+            "Gradient boosting | CueNet residual |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+        for row in metrics["risk_coverage"]:
+            gate = row["expected_cushions_at_most"]
+            label = "no gate" if gate == "all" else f"≤ {gate}"
+            lines.append(
+                f"| {label} | {row['n']} | {row['coverage_pct']:.1f}% | "
+                f"{row['analytic']:.0f} mm | {row['gbm']:.0f} mm | {row['cuenet']:.0f} mm |"
+            )
     return "\n".join(lines) + "\n"
 
 
