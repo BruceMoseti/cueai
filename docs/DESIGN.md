@@ -1,5 +1,8 @@
 # Design
 
+▶ [Play the game](https://brucemoseti.github.io/cueai/#play) — the fourth tier
+described below, running in the browser.
+
 ## The problem this solves
 
 Simulating a billiards shot accurately is slow. Sixteen bodies, each in one of
