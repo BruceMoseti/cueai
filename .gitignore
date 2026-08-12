@@ -15,3 +15,8 @@ data/processed/
 *.log
 .DS_Store
 .cppbuild/
+
+# Puppeteer, installed on demand by web/test/browser.mjs
+node_modules/
+package-lock.json
+docs/assets/.frames/

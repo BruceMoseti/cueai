@@ -323,3 +323,62 @@ def test_analytic_baseline_tracks_simulator_across_a_cushion() -> None:
     predicted = analytic.predict_endpoint(shot, start, table)
     error = float(np.linalg.norm(result.endpoints[0] - predicted))
     assert error < 0.10, f"closed-form baseline off by {error * 1000:.0f} mm"
+
+
+def test_vertical_spin_decays_to_zero_without_chattering() -> None:
+    """
+    Spinning friction must land on zero, not step past it.
+
+    The decrement per timestep is constant, so subtracting it unconditionally
+    overshoots and flips the sign, leaving the ball spinning at a small
+    alternating rate for ever. Nothing downstream notices except that the table
+    never comes to rest, which is why this is asserted directly.
+    """
+    table = TableParams(**SMOOTH_CLOTH)
+    params = BallParams()
+    dt = 1e-3
+    # Deliberately start below one step's worth of decay, where overshoot bites.
+    step = 2.5 * table.mu_spin * G / params.radius * dt
+    ball = Ball(
+        id=0,
+        pos=np.array([1.0, 0.635]),
+        vel=np.zeros(2),
+        omega=np.array([0.0, 0.0, 0.4 * step]),
+        params=params,
+    )
+
+    previous = abs(float(ball.omega[2]))
+    for _ in range(50):
+        ball = integrate_ball(ball, table, dt)
+        current = abs(float(ball.omega[2]))
+        assert current <= previous + 1e-12, "spin grew while friction was removing it"
+        previous = current
+
+    assert float(ball.omega[2]) == 0.0
+    assert ball.motion_state(table) is MotionState.STATIONARY
+
+
+@pytest.mark.parametrize(
+    ("label", "shot"),
+    [
+        ("soft into the rack", ShotParams(speed=2.5, angle=0.12, english_x=0.2, english_y=-0.1)),
+        ("hard break", ShotParams(speed=8.0, angle=0.0)),
+        ("heavy right english", ShotParams(speed=4.0, angle=0.35, english_x=0.48)),
+        ("draw into the pack", ShotParams(speed=5.0, angle=-0.05, english_y=-0.45)),
+    ],
+)
+def test_every_shot_reaches_rest_before_the_time_limit(label: str, shot: ShotParams) -> None:
+    """
+    A shot must end because the balls stopped, not because the clock ran out.
+
+    Hitting ``max_time`` silently truncates the shot, and a truncated shot is
+    still reported as a resting position, so the failure is invisible in the
+    output and shows up only as a simulator that will not terminate.
+    """
+    sim = Simulator(dt=1e-3, max_time=15.0)
+    result = sim.simulate_shot(shot, full_rack=True, seed=7)
+    settled_at = float(result.times[-1])
+    assert settled_at < sim.max_time - 1.0, (
+        f"{label}: still moving at {settled_at:.1f}s, the {sim.max_time:.0f}s limit truncated it"
+    )
+

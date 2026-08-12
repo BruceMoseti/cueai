@@ -96,6 +96,19 @@ export function motionState(b, eps = 1e-3) {
   return MotionState.SLIDING;
 }
 
+/**
+ * Spin-down about the vertical axis, clamped at zero.
+ *
+ * The decrement per step is constant, so subtracting it unconditionally steps
+ * past zero and flips the sign; the ball then chatters between two small
+ * values and never reaches rest. Friction removes spin, it cannot reverse it.
+ */
+export function decaySpin(wz, table, dt) {
+  const step = ((2.5 * table.muSpin * G) / BALL.radius) * dt;
+  if (Math.abs(wz) <= step) return 0;
+  return wz - Math.sign(wz) * step;
+}
+
 /** Smooth spatial variation in cloth friction, so the table is not ideal. */
 export function localMuSlide(table, x, y) {
   const amp = table.frictionNoiseAmp;
@@ -131,10 +144,7 @@ export function integrateBall(b, table, dt) {
   }
 
   if (state === MotionState.SPINNING) {
-    const decay = (2.5 * table.muSpin * G) / R;
-    const sgn = Math.sign(b.wz);
-    b.wz -= decay * sgn * dt;
-    if (Math.abs(b.wz) < 1e-4) b.wz = 0;
+    b.wz = decaySpin(b.wz, table, dt);
     return;
   }
 
@@ -147,18 +157,14 @@ export function integrateBall(b, table, dt) {
     const ax = -muS * G * (ux / uMag);
     const ay = -muS * G * (uy / uMag);
     // tau = (-R zhat) x F  =>  alpha = (R m a_y / I, -R m a_x / I, 0)
-    let alphaX = (R * m * ay) / I;
-    let alphaY = (-R * m * ax) / I;
-    let alphaZ = 0;
-    if (Math.abs(b.wz) > 1e-6) {
-      alphaZ = (-Math.sign(b.wz) * 2.5 * table.muSpin * G) / R;
-    }
+    const alphaX = (R * m * ay) / I;
+    const alphaY = (-R * m * ax) / I;
 
     b.vx += ax * dt;
     b.vy += ay * dt;
     b.wx += alphaX * dt;
     b.wy += alphaY * dt;
-    b.wz += alphaZ * dt;
+    b.wz = decaySpin(b.wz, table, dt);
 
     const [u2x, u2y] = slipVelocity(b);
     if (Math.hypot(u2x, u2y) < Math.max(1e-3, 0.01 * speed(b))) {
@@ -195,9 +201,7 @@ export function integrateBall(b, table, dt) {
   }
   b.wx = -b.vy / R;
   b.wy = b.vx / R;
-  if (Math.abs(b.wz) > 1e-6) {
-    b.wz -= ((Math.sign(b.wz) * 2.5 * table.muSpin * G) / R) * dt;
-  }
+  b.wz = decaySpin(b.wz, table, dt);
   b.x += b.vx * dt;
   b.y += b.vy * dt;
 }

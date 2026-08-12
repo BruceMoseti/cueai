@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
@@ -94,6 +95,22 @@ class Ball:
         return MotionState.SLIDING
 
 
+def decay_spin(omega_z: float, table: TableParams, radius: float, dt: float) -> float:
+    """
+    Spin-down about the vertical axis, clamped at zero.
+
+    The decrement per step is constant, so subtracting it unconditionally steps
+    straight past zero and flips the sign; the ball then chatters between two
+    small values and never reaches rest, and `Simulator.run` gives up at
+    `max_time` instead of stopping when the table is still. Clamping is not a
+    tolerance hack: friction removes spin, it cannot reverse it.
+    """
+    step = 2.5 * table.mu_spin * G / radius * dt
+    if abs(omega_z) <= step:
+        return 0.0
+    return omega_z - math.copysign(step, omega_z)
+
+
 def local_mu_slide(table: TableParams, pos: np.ndarray) -> float:
     """Spatially varying sliding friction (table imperfections via smooth noise)."""
     amp = table.friction_noise_amp
@@ -115,7 +132,6 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
     R, m, I = b.R, b.m, b.I
     mu_s = local_mu_slide(table, b.pos)
     mu_r = table.mu_roll
-    mu_sp = table.mu_spin
 
     if state is MotionState.STATIONARY:
         b.vel[:] = 0
@@ -123,11 +139,7 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         return b
 
     if state is MotionState.SPINNING:
-        decay = 2.5 * mu_sp * G / R
-        sgn = np.sign(b.omega[2]) if b.omega[2] != 0 else 0.0
-        b.omega[2] -= decay * sgn * dt
-        if abs(b.omega[2]) < 1e-4:
-            b.omega[2] = 0.0
+        b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
         return b
 
     if state is MotionState.SLIDING:
@@ -140,11 +152,10 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         a = -mu_s * G * u_hat
         # τ = (-Rẑ) × F  ⇒  α = (R m a_y / I, -R m a_x / I, 0)
         alpha = np.array([R * m * a[1] / I, -R * m * a[0] / I, 0.0])
-        if abs(b.omega[2]) > 1e-6:
-            alpha[2] = -np.sign(b.omega[2]) * 2.5 * mu_sp * G / R
 
         b.vel = b.vel + a * dt
         b.omega = b.omega + alpha * dt
+        b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
         u2 = b.slip_velocity()
         if float(np.linalg.norm(u2)) < max(1e-3, 0.01 * b.speed()):
             b.omega[0] = -b.vel[1] / R
@@ -168,7 +179,6 @@ def integrate_ball(ball: Ball, table: TableParams, dt: float) -> Ball:
         return b
     b.omega[0] = -b.vel[1] / R
     b.omega[1] = b.vel[0] / R
-    if abs(b.omega[2]) > 1e-6:
-        b.omega[2] -= np.sign(b.omega[2]) * 2.5 * mu_sp * G / R * dt
+    b.omega[2] = decay_spin(float(b.omega[2]), table, R, dt)
     b.pos = b.pos + b.vel * dt
     return b
