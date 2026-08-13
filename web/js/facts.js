@@ -9,13 +9,17 @@
  */
 
 export async function loadFacts(url = "data/facts.json") {
-  let facts;
-  try {
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) throw new Error(`${response.status}`);
-    facts = await response.json();
-  } catch {
-    return null; // opened from disk, or the file has not been generated
+  // The single-file build has no server to fetch from, so it carries the
+  // measured values with it.
+  let facts = window.__measuredFacts;
+  if (!facts) {
+    try {
+      const response = await fetch(url, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`${response.status}`);
+      facts = await response.json();
+    } catch {
+      return null; // opened from disk, or the file has not been generated
+    }
   }
 
   const stale = [];

@@ -85,6 +85,18 @@ jobs:
       - name: Drive the page with a real cursor and keyboard
         run: node web/test/input.mjs --url http://localhost:8123/index.html
 
+      # play.html is the same game inlined into one file, for opening from a
+      # disk with no server. It is generated, so it can go stale, and it loads
+      # under file:// where fetch is refused — so it is rebuilt, compared, and
+      # then actually played from a file rather than trusted.
+      - name: Check the one-file build still matches web/
+        run: node web/build/standalone.mjs --check
+
+      - name: Play the one-file build straight off the disk
+        run: |
+          node web/test/browser.mjs --url "file://$PWD/play.html" --games 1
+          node web/test/input.mjs --url "file://$PWD/play.html"
+
   pipeline:
     # Proves the data -> train -> export -> serve path still works end to end,
     # on a dataset small enough to finish in a couple of minutes.

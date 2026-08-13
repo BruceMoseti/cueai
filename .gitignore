@@ -2,8 +2,9 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-dist/
-build/
+/dist/
+# Anchored: setuptools writes ./build, but web/build holds source.
+/build/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/

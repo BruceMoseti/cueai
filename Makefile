@@ -1,5 +1,5 @@
 .PHONY: help setup test lint typecheck check train bench figures facts api ui play \
-        parity parity-check selfplay browser input capture web clean all
+        parity parity-check selfplay browser input capture standalone web clean all
 .DEFAULT_GOAL := help
 
 PY ?= python3
@@ -45,6 +45,10 @@ browser:  ## Load the page in Chrome and play a game (needs puppeteer-core)
 
 capture:  ## Re-record the screenshots and the clip in the README
 	$(NODE) web/test/capture.mjs --url http://localhost:$(PORT)/index.html
+
+standalone:  ## Rebuild play.html, the whole game in one openable file
+	$(NODE) web/build/standalone.mjs
+	$(NODE) web/test/browser.mjs --url file://$(CURDIR)/play.html --games 1
 
 web: parity selfplay  ## Every check that does not need a browser
 
