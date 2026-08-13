@@ -32,7 +32,13 @@ function parseArgs() {
   };
   return {
     url: get("--url", "http://localhost:8123/index.html"),
-    shots: Number(get("--shots", 40)),
+    // One action of the harness: a placement, or a shot of its own. The bot's
+    // replies happen inside a single wait and do not count. The harness aims at
+    // a random legal ball on purpose, so it plays badly and its games run long
+    // in the tail — one here needed 40 and was still going. The cap is only
+    // here to catch a table that has genuinely stopped making progress, so it
+    // sits well above that rather than close to the average.
+    shots: Number(get("--shots", 120)),
     games: Number(get("--games", 1)),
     screenshot: get("--screenshot", null),
     verbose: args.includes("--verbose"),
@@ -128,7 +134,12 @@ async function main() {
           `${result.fouls} fouls, ` +
           (result.finished ? `winner ${result.winner}` : "shot limit reached")
       );
-      if (!result.finished) throw new Error("game did not reach a conclusion");
+      if (!result.finished) {
+        throw new Error(
+          `game did not reach a conclusion: ${result.shots} shots played in ` +
+            `${shotLimit} turns of the harness, phase "${result.phase}"`
+        );
+      }
       if (result.botShots === 0) throw new Error("the bot never took a shot");
     }
     if (screenshot) await page.screenshot({ path: screenshot, fullPage: true });
@@ -223,6 +234,7 @@ async function playGame(page, shotLimit, verbose = false) {
     potted: history.reduce((a, h) => a + h.potted.filter((n) => n !== 0).length, 0),
     fouls: history.filter((h) => h.foul).length,
     finished: final.phase === "over",
+    phase: final.phase,
     winner: final.winner,
   };
 }

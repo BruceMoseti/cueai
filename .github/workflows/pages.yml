@@ -56,15 +56,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # enablement turns Pages on for the repository if it is off, so the
-      # published link works without anyone visiting the settings page first.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      # Publishing needs Pages switched on once, by hand, with Source set to
+      # "GitHub Actions" in Settings -> Pages. It cannot be automated from here:
+      # creating a Pages site needs administration:write, which a workflow token
+      # cannot be granted, and the REST call is refused. Left to itself
+      # configure-pages reports that as "Resource not accessible by
+      # integration", which reads like a broken workflow rather than a setting
+      # nobody has set, so the precondition is checked and named instead.
+      - id: site
+        name: Check that Pages is switched on
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Nothing was published::GitHub Pages is not enabled for this repository. Set Settings -> Pages -> Source to \"GitHub Actions\", then re-run this workflow. Creating the site needs administration:write, which no workflow token can hold."
+          fi
 
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.site.outputs.exists == 'true'
+        uses: actions/configure-pages@v5
+
+      - if: steps.site.outputs.exists == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: web
 
       - id: deployment
+        if: steps.site.outputs.exists == 'true'
         uses: actions/deploy-pages@v4
