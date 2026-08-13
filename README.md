@@ -36,6 +36,13 @@ closed-form references.
 "Quick" playback the page offers, with the bot's search pauses capped at
 0.8 s. The shots are the game's, not an animation.*
 
+**Three ways in, none of which need a toolchain.** The link above, `make play`
+to serve `web/` yourself, or `play.html` — the whole game inlined into one file
+that plays when you open it from a disk, offline, with no server. Download it
+from the repository root and double-click it. `web/build/standalone.mjs` builds
+it, and CI plays a full game from `file://` on every push so the copy cannot
+quietly rot.
+
 No install, no build step, no framework — `web/` is plain ES modules, and the
 whole thing is served as static files. Aim with the mouse, drag back from the
 cue ball to strike, click the cue-ball diagram to move the tip off centre. Every
